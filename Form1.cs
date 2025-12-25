@@ -72,6 +72,12 @@ namespace Programma_2kyrs
                 case 1: // Золотое сечение
                     InitializeGoldenRatioControls();
                     break;
+                case 2: // Метод ньютона
+                    InitializeNewtonMethodControls();
+                    break;
+                case 3: // Cортировки
+                    InitializeSortingControls();
+                    break;
                 case 6: // Решение СЛАУ
                     InitializeSloughSolutionControls();
                     break;
@@ -1222,6 +1228,572 @@ namespace Programma_2kyrs
             {
                 resultLabel.Text = $"Ошибка: {ex.Message}";
             }
+        }
+
+        //********************************************************************************************| МЕТОД НЬЮТОНА |****************************************************************************************//
+
+        // ИНТЕРФЕЙС МЕТОДА НЬЮТОНА
+        private void InitializeNewtonMethodControls()
+        {
+            // Очищаем панель
+            panel1.Controls.Clear();
+
+            // Создаем элементы управления
+            var labelFunction = new Label { Text = "Функция f(x):", Location = new Point(10, 10) };
+            var textBoxFunction = new System.Windows.Forms.TextBox { Location = new Point(120, 10), Width = 180, Text = "x^3 - 2*x - 5" };
+
+            var labelDerivative = new Label { Text = "Производная f'(x):", Location = new Point(10, 40) };
+            var textBoxDerivative = new System.Windows.Forms.TextBox { Location = new Point(120, 40), Width = 120, Text = "3*x^2 - 2" };
+
+            // Кнопка для автоматического вычисления производной
+            var btnAutoDerivative = new System.Windows.Forms.Button
+            {
+                Text = "Авто",
+                Location = new Point(249, 39),
+                Width = 50,
+                BackColor = Color.LightGray
+            };
+
+            var labelX0 = new Label { Text = "Начальное x₀:", Location = new Point(10, 70) };
+            var textBoxX0 = new System.Windows.Forms.TextBox { Location = new Point(120, 70), Width = 180, Text = "2" };
+
+            var labelEpsilon = new Label { Text = "Точность", Location = new Point(10, 100) };
+            var textBoxEpsilon = new System.Windows.Forms.TextBox { Location = new Point(120, 100), Width = 180, Text = "1" };
+
+            var labelMaxIterations = new Label { Text = "Макс. итераций:", Location = new Point(10, 130) };
+            var textBoxMaxIterations = new System.Windows.Forms.TextBox { Location = new Point(120, 130), Width = 180, Text = "10" };
+
+            var calculateButton = new System.Windows.Forms.Button
+            {
+                Text = "Вычислить корень",
+                Location = new Point(10, 160),
+                BackColor = Color.LightBlue,
+                Width = 140
+            };
+
+            var resultLabel = new Label
+            {
+                Text = "Результат:",
+                Location = new Point(10, 190),
+                AutoSize = true,
+                Height = 120,
+                Width = 280
+            };
+
+            var labelGraphic = new Label { Text = "График f(x) и касательные", Location = new Point(320, 10), AutoSize = true };
+
+            var graficPanel = new Panel
+            {
+                Location = new Point(320, 40),
+                Size = new Size(450, 380),
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            // Таблица итераций
+            var dataGridView = new DataGridView
+            {
+                Location = new Point(10, 270),
+                Size = new Size(290, 150),
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                ReadOnly = true,
+                RowHeadersVisible = false,
+                ScrollBars = ScrollBars.Vertical
+            };
+
+            // Настраиваем столбцы таблицы
+            dataGridView.Columns.Add("Iteration", "Итер.");
+            dataGridView.Columns.Add("x", "xₙ");
+            dataGridView.Columns.Add("f(x)", "f(xₙ)");
+            dataGridView.Columns.Add("f'(x)", "f'(xₙ)");
+            dataGridView.Columns.Add("Delta", "Δx");
+
+            // Устанавливаем формат отображения чисел
+            dataGridView.Columns["f(x)"].DefaultCellStyle.Format = "E4";
+            dataGridView.Columns["f'(x)"].DefaultCellStyle.Format = "E4";
+            dataGridView.Columns["Delta"].DefaultCellStyle.Format = "E4";
+
+            // Обработчик для автоматического вычисления производной
+            btnAutoDerivative.Click += (s, e) =>
+            {
+                try
+                {
+                    string function = textBoxFunction.Text.Trim();
+                    if (!string.IsNullOrEmpty(function))
+                    {
+                        string derivative = CalculateDerivative(function);
+                        textBoxDerivative.Text = derivative;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Ошибка вычисления производной: {ex.Message}", "Ошибка",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            };
+
+            // Обработчик отрисовки графика
+            graficPanel.Paint += (sender, e) =>
+            {
+                DrawNewtonGraph(e.Graphics, graficPanel.ClientRectangle,
+                    textBoxFunction.Text, textBoxDerivative.Text);
+            };
+
+            // Кнопка для построения графика
+            var drawButton = new System.Windows.Forms.Button
+            {
+                Text = "Построить график",
+                Location = new Point(160, 160),
+                BackColor = Color.LightGreen,
+                Width = 140
+            };
+
+            drawButton.Click += (s, e) =>
+            {
+                if (!string.IsNullOrEmpty(textBoxFunction.Text))
+                {
+                    currentFunction = textBoxFunction.Text;
+                    graficPanel.Invalidate();
+                }
+            };
+
+            // Обработчик вычисления
+            calculateButton.Click += (s, e) =>
+            {
+                dataGridView.Rows.Clear();
+                CalculateNewtonMethod(
+                    textBoxFunction.Text,
+                    textBoxDerivative.Text,
+                    textBoxX0.Text,
+                    textBoxEpsilon.Text,
+                    textBoxMaxIterations.Text,
+                    resultLabel,
+                    dataGridView
+                );
+                graficPanel.Invalidate();
+            };
+
+            // Добавляем элементы на панель
+            panel1.Controls.AddRange(new Control[]
+            {
+        labelFunction, textBoxFunction,
+        labelDerivative, textBoxDerivative, btnAutoDerivative,
+        labelX0, textBoxX0,
+        labelEpsilon, textBoxEpsilon,
+        labelMaxIterations, textBoxMaxIterations,
+        calculateButton, drawButton,
+        resultLabel, labelGraphic, graficPanel,
+        dataGridView
+            });
+        }
+
+        // МЕТОД ДЛЯ ВЫЧИСЛЕНИЯ ПРОИЗВОДНОЙ (упрощенный)
+        private string CalculateDerivative(string function)
+        {
+            // Упрощенный метод вычисления производной (для основных функций)
+            // В реальном проекте лучше использовать символьные вычисления
+
+            function = function.ToLower().Replace(" ", "");
+
+            // Простейшие правила дифференцирования
+            if (function.Contains("x^"))
+            {
+                // Попробуем извлечь степень
+                int index = function.IndexOf("x^");
+                if (index >= 0)
+                {
+                    string rest = function.Substring(index + 2);
+                    if (double.TryParse(rest, out double power))
+                    {
+                        if (power == 1)
+                            return "1";
+                        else if (power == 2)
+                            return "2*x";
+                        else if (power == 3)
+                            return "3*x^2";
+                        else
+                            return $"{power}*x^{power - 1}";
+                    }
+                }
+            }
+            else if (function == "x")
+            {
+                return "1";
+            }
+            else if (function == "sin(x)")
+            {
+                return "cos(x)";
+            }
+            else if (function == "cos(x)")
+            {
+                return "-sin(x)";
+            }
+            else if (function == "exp(x)" || function == "e^x")
+            {
+                return function; // Производная e^x равна e^x
+            }
+            else if (function == "ln(x)")
+            {
+                return "1/x";
+            }
+
+            // Если не удалось определить производную, возвращаем приближенную формулу
+            return $"(f(x+0.001)-f(x))/0.001";
+        }
+
+        // МЕТОД НЬЮТОНА ДЛЯ НАХОЖДЕНИЯ КОРНЯ
+        private void CalculateNewtonMethod(string functionStr, string derivativeStr, string x0Str, string epsilonStr, string maxIterStr, Label resultLabel, DataGridView dataGridView)
+        {
+            double accuracy = 1;
+
+            try
+            {
+                double x0 = double.Parse(x0Str);
+                double epsilon = double.Parse(epsilonStr);
+                int maxIterations = int.Parse(maxIterStr);
+
+                if (epsilon < 1)
+                {
+                    resultLabel.Text = "Ошибка: Точность должна быть не меньше 1 знака после запятой!";
+                    return;
+                }
+
+                accuracy = 1 / Math.Pow(10, epsilon);
+
+                if (maxIterations <= 0)
+                {
+                    resultLabel.Text = "Ошибка: Максимальное число итераций должно быть больше 0!";
+                    return;
+                }
+
+                double xn = x0;
+                double fxn = EvaluateMathExpression(functionStr, xn);
+                double fpxn = 0;
+                double delta = 0;
+                int iteration = 0;
+                bool converged = false;
+
+                List<double> iterationPoints = new List<double>();
+                iterationPoints.Add(xn);
+
+                // Сохраняем для отрисовки
+                currentFunction = functionStr;
+                lastRoot = 0;
+
+                // Основной цикл метода Ньютона
+                while (iteration < maxIterations)
+                {
+                    // Вычисляем значение функции
+                    fxn = EvaluateMathExpression(functionStr, xn);
+
+                    // Вычисляем производную
+                    if (derivativeStr.Contains("f(x+") && derivativeStr.Contains("f(x)"))
+                    {
+                        // Используем приближенную производную
+                        double h = 0.0001;
+                        double fxh = EvaluateMathExpression(functionStr, xn + h);
+                        fpxn = (fxh - fxn) / h;
+                    }
+                    else
+                    {
+                        // Используем аналитическую производную
+                        fpxn = EvaluateMathExpression(derivativeStr, xn);
+                    }
+
+                    // Проверка на нулевую производную
+                    if (Math.Abs(fpxn) < accuracy)
+                    {
+                        resultLabel.Text = $"Ошибка: Производная близка к нулю!\n" +
+                                          $"f'({xn:F6}) = {fpxn:E}\n" +
+                                          $"Итерация: {iteration}";
+                        return;
+                    }
+
+                    // Формула метода Ньютона: x_{n+1} = x_n - f(x_n)/f'(x_n)
+                    double xn1 = xn - fxn / fpxn;
+                    delta = Math.Abs(xn1 - xn);
+
+                    // Добавляем строку в таблицу
+                    dataGridView.Rows.Add(iteration + 1,
+                                         xn.ToString("F6"),
+                                         fxn.ToString("E4"),
+                                         fpxn.ToString("E4"),
+                                         delta.ToString("E4"));
+
+                    // Сохраняем точку для отрисовки
+                    iterationPoints.Add(xn1);
+
+                    // Проверка условия остановки
+                    if (Math.Abs(fxn) < accuracy || delta < accuracy)
+                    {
+                        converged = true;
+                        xn = xn1;
+                        lastRoot = xn;
+                        break;
+                    }
+
+                    xn = xn1;
+                    iteration++;
+                }
+
+                // Формируем результат
+                if (converged)
+                {
+                    fxn = EvaluateMathExpression(functionStr, xn);
+                    resultLabel.Text = $"Корень найден:\n" +
+                                      $"x = {xn:F8}\n" +
+                                      $"f(x) = {fxn:E}\n" +
+                                      $"Итераций: {iteration + 1}\n" +
+                                      $"Точность: {epsilon}";
+
+                    lastRoot = xn;
+                }
+                else
+                {
+                    resultLabel.Text = $"Метод не сошелся за {maxIterations} итераций!\n" +
+                                      $"Последнее приближение: {xn:F8}\n" +
+                                      $"f(x) = {fxn:E}\n" +
+                                      $"Последнее Δx: {delta:E}";
+                }
+
+                // Сохраняем историю итераций для отрисовки
+                newtonIterationPoints = iterationPoints;
+            }
+            catch (FormatException)
+            {
+                resultLabel.Text = "Ошибка: Проверьте правильность ввода чисел!";
+            }
+            catch (Exception ex)
+            {
+                resultLabel.Text = $"Ошибка: {ex.Message}";
+            }
+        }
+
+        // Поле для хранения истории итераций метода Ньютона
+        private List<double> newtonIterationPoints = new List<double>();
+
+        // ОТРИСОВКА ГРАФИКА ДЛЯ МЕТОДА НЬЮТОНА
+        private void DrawNewtonGraph(Graphics g, Rectangle drawingArea, string functionStr, string derivativeStr)
+        {
+            if (string.IsNullOrEmpty(functionStr))
+                return;
+
+            try
+            {
+                g.Clear(Color.White);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+
+                int padding = 40;
+                Rectangle graphArea = new Rectangle(
+                    drawingArea.Left + padding,
+                    drawingArea.Top + padding,
+                    drawingArea.Width - 2 * padding,
+                    drawingArea.Height - 2 * padding
+                );
+
+                DrawGrid(g, graphArea);
+                DrawAxes(g, graphArea);
+                DrawNewtonFunction(g, graphArea, functionStr);
+                DrawNewtonLabels(g, graphArea, drawingArea, functionStr);
+
+                // Если есть история итераций, рисуем касательные
+                if (newtonIterationPoints != null && newtonIterationPoints.Count > 0)
+                {
+                    DrawNewtonTangents(g, graphArea, functionStr, derivativeStr);
+                }
+            }
+            catch (Exception ex)
+            {
+                g.DrawString($"Ошибка построения: {ex.Message}",
+                    new Font("Arial", 10), Brushes.Red, 10, 10);
+            }
+        }
+
+        // ОТРИСОВКА ГРАФИКА ФУНКЦИИ ДЛЯ МЕТОДА НЬЮТОНА
+        private void DrawNewtonFunction(Graphics g, Rectangle graphArea, string functionStr)
+        {
+            try
+            {
+                float scaleX = graphArea.Width / 20f;
+                float scaleY = graphArea.Height / 20f;
+
+                PointF center = new PointF(
+                    graphArea.Left + graphArea.Width / 2,
+                    graphArea.Top + graphArea.Height / 2
+                );
+
+                using (Pen graphPen = new Pen(Color.Blue, 2))
+                {
+                    PointF? lastPoint = null;
+
+                    for (int i = 0; i <= graphArea.Width; i++)
+                    {
+                        double worldX = -10 + (20.0 * i / graphArea.Width);
+
+                        try
+                        {
+                            double worldY = EvaluateMathExpression(functionStr, worldX);
+
+                            float screenX = center.X + (float)(worldX * scaleX);
+                            float screenY = center.Y - (float)(worldY * scaleY);
+
+                            PointF currentPoint = new PointF(screenX, screenY);
+
+                            if (lastPoint.HasValue)
+                            {
+                                g.DrawLine(graphPen, lastPoint.Value, currentPoint);
+                            }
+
+                            lastPoint = currentPoint;
+                        }
+                        catch
+                        {
+                            lastPoint = null;
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // ОТРИСОВКА КАСАТЕЛЬНЫХ ДЛЯ ИТЕРАЦИЙ МЕТОДА НЬЮТОНА
+        private void DrawNewtonTangents(Graphics g, Rectangle graphArea, string functionStr, string derivativeStr)
+        {
+            if (newtonIterationPoints == null || newtonIterationPoints.Count == 0)
+                return;
+
+            float scaleX = graphArea.Width / 20f;
+            float scaleY = graphArea.Height / 20f;
+
+            PointF center = new PointF(
+                graphArea.Left + graphArea.Width / 2,
+                graphArea.Top + graphArea.Height / 2
+            );
+
+            Color[] tangentColors = { Color.Red, Color.Green, Color.Purple, Color.Orange };
+
+            for (int i = 0; i < Math.Min(newtonIterationPoints.Count - 1, 4); i++)
+            {
+                double x0 = newtonIterationPoints[i];
+
+                try
+                {
+                    double y0 = EvaluateMathExpression(functionStr, x0);
+
+                    // Вычисляем производную
+                    double derivative;
+                    if (derivativeStr.Contains("f(x+") && derivativeStr.Contains("f(x)"))
+                    {
+                        double h = 0.0001;
+                        double fxh = EvaluateMathExpression(functionStr, x0 + h);
+                        derivative = (fxh - y0) / h;
+                    }
+                    else
+                    {
+                        derivative = EvaluateMathExpression(derivativeStr, x0);
+                    }
+
+                    // Уравнение касательной: y = y0 + derivative*(x - x0)
+                    // Вычисляем две точки для отрисовки линии
+                    double x1 = x0 - 2;
+                    double x2 = x0 + 2;
+
+                    double y1 = y0 + derivative * (x1 - x0);
+                    double y2 = y0 + derivative * (x2 - x0);
+
+                    // Преобразуем в экранные координаты
+                    float screenX1 = center.X + (float)(x1 * scaleX);
+                    float screenY1 = center.Y - (float)(y1 * scaleY);
+                    float screenX2 = center.X + (float)(x2 * scaleX);
+                    float screenY2 = center.Y - (float)(y2 * scaleY);
+
+                    // Рисуем касательную
+                    using (Pen tangentPen = new Pen(tangentColors[i % tangentColors.Length], 1.5f))
+                    {
+                        tangentPen.DashStyle = DashStyle.Dash;
+                        g.DrawLine(tangentPen, screenX1, screenY1, screenX2, screenY2);
+                    }
+
+                    // Рисуем точку на графике
+                    float pointX = center.X + (float)(x0 * scaleX);
+                    float pointY = center.Y - (float)(y0 * scaleY);
+
+                    g.FillEllipse(Brushes.Red, pointX - 4, pointY - 4, 8, 8);
+                    g.DrawEllipse(Pens.DarkRed, pointX - 4, pointY - 4, 8, 8);
+
+                    // Подписываем итерацию
+                    g.DrawString($"x{i}", new Font("Arial", 8, FontStyle.Bold),
+                        Brushes.DarkRed, pointX + 5, pointY - 10);
+
+                    // Рисуем вертикальную линию к оси X для следующего приближения
+                    if (i < newtonIterationPoints.Count - 1)
+                    {
+                        double nextX = newtonIterationPoints[i + 1];
+                        float nextScreenX = center.X + (float)(nextX * scaleX);
+
+                        using (Pen guidePen = new Pen(Color.Gray, 1f))
+                        {
+                            guidePen.DashStyle = DashStyle.Dot;
+                            g.DrawLine(guidePen, pointX, pointY, nextScreenX, pointY);
+                            g.DrawLine(guidePen, nextScreenX, pointY, nextScreenX, center.Y);
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // Рисуем последний найденный корень
+            if (lastRoot != 0)
+            {
+                float rootX = center.X + (float)(lastRoot * scaleX);
+
+                // Зеленый кружок на оси X
+                g.FillEllipse(Brushes.Green, rootX - 5, center.Y - 5, 10, 10);
+                g.DrawEllipse(Pens.DarkGreen, rootX - 5, center.Y - 5, 10, 10);
+
+                g.DrawString($"Корень: {lastRoot:F4}",
+                    new Font("Arial", 9, FontStyle.Bold), Brushes.DarkGreen,
+                    rootX + 5, center.Y - 15);
+            }
+        }
+
+        // ПОДПИСИ ДЛЯ ГРАФИКА МЕТОДА НЬЮТОНА
+        private void DrawNewtonLabels(Graphics g, Rectangle graphArea, Rectangle drawingArea, string functionStr)
+        {
+            Font labelFont = new Font("Arial", 9);
+            Font titleFont = new Font("Arial", 10, FontStyle.Bold);
+
+            PointF center = new PointF(
+                graphArea.Left + graphArea.Width / 2,
+                graphArea.Top + graphArea.Height / 2
+            );
+
+            // Подписи осей
+            g.DrawString("X", titleFont, Brushes.Black, graphArea.Right - 15, center.Y - 20);
+            g.DrawString("Y", titleFont, Brushes.Black, center.X + 10, graphArea.Top);
+
+            // Заголовок
+            if (!string.IsNullOrEmpty(functionStr))
+            {
+                string title = $"Метод Ньютона: f(x) = {functionStr}";
+                SizeF titleSize = g.MeasureString(title, titleFont);
+                g.DrawString(title, titleFont, Brushes.DarkBlue,
+                    drawingArea.Left + 10, drawingArea.Top + 10);
+            }
+
+            // Легенда
+            string legend = "Обозначения:  ● - итерации  --- - касательные  ● - найденный корень";
+            g.DrawString(legend, new Font("Arial", 8), Brushes.DarkGray,
+                graphArea.Left, graphArea.Bottom + 5);
+        }
+
+        //**********************************************************************************************| СОРТИРОВКИ |*****************************************************************************************//
+
+        // ИНТЕРФЕЙС СОРТИРОВКИ
+        private void InitializeSortingControls()
+        {
+            // Очищаем панель
+            panel1.Controls.Clear();
         }
 
         //********************************************************************************************| РЕШЕНИЕ СЛАУ |****************************************************************************************//
