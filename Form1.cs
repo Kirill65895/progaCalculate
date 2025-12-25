@@ -15,6 +15,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 using System.Linq.Expressions;
 using Mathos.Parser;
 using System.Runtime.Remoting.Channels;
+using System.Diagnostics;
 
 namespace Programma_2kyrs
 {
@@ -1386,12 +1387,10 @@ namespace Programma_2kyrs
             });
         }
 
-        // МЕТОД ДЛЯ ВЫЧИСЛЕНИЯ ПРОИЗВОДНОЙ (упрощенный)
+        // производная
         private string CalculateDerivative(string function)
         {
             // Упрощенный метод вычисления производной (для основных функций)
-            // В реальном проекте лучше использовать символьные вычисления
-
             function = function.ToLower().Replace(" ", "");
 
             // Простейшие правила дифференцирования
@@ -1794,6 +1793,801 @@ namespace Programma_2kyrs
         {
             // Очищаем панель
             panel1.Controls.Clear();
+
+            // Создаем массив для хранения отсортированных массивов
+            currentArray = new int[0];
+            originalArray = new int[0];
+
+            // Элементы управления
+
+            var labelArraySize = new Label { Text = "Размер массива:", Location = new Point(10, 10), AutoSize = true };
+            var textBoxArraySize = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(220, 10),
+                Width = 100,
+                Text = "100",
+                BackColor = Color.WhiteSmoke
+            };
+
+            var labelMinValue = new Label { Text = "Минимальное значение:", Location = new Point(10, 40), AutoSize = true };
+            var textBoxMinValue = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(220, 40),
+                Width = 100,
+                Text = "-1000",
+                BackColor = Color.WhiteSmoke
+            };
+
+            var labelMaxValue = new Label { Text = "Максимальное значение:", Location = new Point(10, 70), AutoSize = true };
+            var textBoxMaxValue = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(220, 70),
+                Width = 100,
+                Text = "1000",
+                BackColor = Color.WhiteSmoke
+            };
+
+            var labelMaxIterations = new Label { Text = "Макс. итераций (0=без огр.):", Location = new Point(10, 100), AutoSize = true };
+            var textBoxMaxIterations = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(220, 100),
+                Width = 100,
+                Text = "0",
+                BackColor = Color.WhiteSmoke
+            };
+
+            // Кнопки
+            var btnGenerateArray = new System.Windows.Forms.Button
+            {
+                Text = "Сгенерировать массив",
+                Location = new Point(10, 130),
+                BackColor = Color.LightBlue,
+                Width = 150,
+                Height = 25
+            };
+
+            var btnShowArray = new System.Windows.Forms.Button
+            {
+                Text = "Показать массив",
+                Location = new Point(170, 130),
+                BackColor = Color.LightGreen,
+                Width = 150,
+                Height = 25
+            };
+
+            var btnSelectAll = new System.Windows.Forms.Button
+            {
+                Text = "Выбрать все",
+                Location = new Point(10, 190),
+                BackColor = Color.LightYellow,
+                Width = 100,
+                Height = 25
+            };
+
+            var btnDeselectAll = new System.Windows.Forms.Button
+            {
+                Text = "Снять все",
+                Location = new Point(120, 190),
+                BackColor = Color.LightCoral,
+                Width = 100,
+                Height = 25
+            };
+
+            var btnRunSorts = new System.Windows.Forms.Button
+            {
+                Text = "Запустить выбранные",
+                Location = new Point(10, 160),
+                BackColor = Color.MediumSeaGreen,
+                Width = 150,
+                Height = 25,
+            };
+
+            var btnCompareAll = new System.Windows.Forms.Button
+            {
+                Text = "Сравнить",
+                Location = new Point(170, 160),
+                BackColor = Color.MediumPurple,
+                Width = 150,
+                Height = 25,
+            };
+
+            // Чекбоксы для выбора сортировок
+            int startY = 250;
+            int checkboxSpacing = 30;
+
+            var chkBubble = new CheckBox { Text = "Пузырьковая сортировка", Location = new Point(10, 20), Width = 200, Checked = true };
+            var lblBubbleTime = new Label { Text = "0 мс", Location = new Point(220, 20), Width = 100, ForeColor = Color.DarkGreen, TextAlign = ContentAlignment.MiddleLeft };
+
+            var chkShaker = new CheckBox { Text = "Шейкерная сортировка", Location = new Point(10, 50), Width = 200, Checked = true };
+            var lblShakerTime = new Label { Text = "0 мс", Location = new Point(220, 50), Width = 100, ForeColor = Color.DarkGreen, TextAlign = ContentAlignment.MiddleLeft };
+
+            var chkInsertion = new CheckBox { Text = "Сортировка вставками", Location = new Point(10, 80), Width = 200, Checked = true };
+            var lblInsertionTime = new Label { Text = "0 мс", Location = new Point(220, 80), Width = 100, ForeColor = Color.DarkGreen, TextAlign = ContentAlignment.MiddleLeft };
+
+            var chkQuick = new CheckBox { Text = "Быстрая сортировка", Location = new Point(10, 110), Width = 200, Checked = true };
+            var lblQuickTime = new Label { Text = "0 мс", Location = new Point(220, 110), Width = 100, ForeColor = Color.DarkGreen, TextAlign = ContentAlignment.MiddleLeft };
+
+            var chkBogo = new CheckBox { Text = "Болотная сортировка", Location = new Point(10, 140), Width = 200, Checked = false };
+            var lblBogoTime = new Label { Text = "0 мс", Location = new Point(220, 140), Width = 100, ForeColor = Color.DarkRed, TextAlign = ContentAlignment.MiddleLeft };
+
+            // Группировка для чекбоксов
+            var groupBoxSorts = new GroupBox
+            {
+                Text = "Выбор алгоритмов сортировки",
+                Location = new Point(10, startY - 25),
+                Size = new Size(330, checkboxSpacing * 5 + 30)
+            };
+
+            // Панель для отображения массива
+            var arrayPanel = new Panel
+            {
+                Location = new Point(350, 40),
+                Size = new Size(420, 350),
+                BorderStyle = BorderStyle.FixedSingle,
+                AutoScroll = true,
+                BackColor = Color.White
+            };
+
+            var labelArray = new Label
+            {
+                Text = "Массив:",
+                Location = new Point(350, 10),
+                AutoSize = true,
+                Font = new Font("Arial", 10, FontStyle.Bold)
+            };
+
+            // TextBox для вывода результатов сравнения
+            var resultTextBox = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(10, startY + checkboxSpacing * 5 + 10),
+                Size = new Size(760, 70),
+                Multiline = true,
+                ReadOnly = true,
+                ScrollBars = ScrollBars.Vertical,
+                Font = new Font("Consolas", 9),
+                BackColor = Color.Lavender
+            };
+
+            // Статистика
+            var statsLabel = new Label
+            {
+                Location = new Point(10, startY + checkboxSpacing * 5 + 120),
+                Size = new Size(790, 50),
+                Text = "Статистика: Ожидание генерации массива...",
+                Font = new Font("Arial", 9),
+                ForeColor = Color.DarkSlateGray
+            };
+
+            // Добавляем чекбоксы в группу
+            groupBoxSorts.Controls.Add(chkBubble);
+            groupBoxSorts.Controls.Add(lblBubbleTime);
+            groupBoxSorts.Controls.Add(chkShaker);
+            groupBoxSorts.Controls.Add(lblShakerTime);
+            groupBoxSorts.Controls.Add(chkInsertion);
+            groupBoxSorts.Controls.Add(lblInsertionTime);
+            groupBoxSorts.Controls.Add(chkQuick);
+            groupBoxSorts.Controls.Add(lblQuickTime);
+            groupBoxSorts.Controls.Add(chkBogo);
+            groupBoxSorts.Controls.Add(lblBogoTime);
+
+            // Обработчики событий
+            btnGenerateArray.Click += (s, e) =>
+            {
+                GenerateRandomArray(
+                    textBoxArraySize.Text,
+                    textBoxMinValue.Text,
+                    textBoxMaxValue.Text,
+                    arrayPanel,
+                    statsLabel
+                );
+            };
+
+            btnShowArray.Click += (s, e) =>
+            {
+                ShowArrayInPanel(arrayPanel, currentArray.Length > 0 ? currentArray : originalArray);
+            };
+
+            btnSelectAll.Click += (s, e) =>
+            {
+                chkBubble.Checked = true;
+                chkShaker.Checked = true;
+                chkInsertion.Checked = true;
+                chkQuick.Checked = true;
+                chkBogo.Checked = false; // Болотную оставляем выключенной по умолчанию
+            };
+
+            btnDeselectAll.Click += (s, e) =>
+            {
+                chkBubble.Checked = false;
+                chkShaker.Checked = false;
+                chkInsertion.Checked = false;
+                chkQuick.Checked = false;
+                chkBogo.Checked = false;
+            };
+
+            btnRunSorts.Click += (s, e) =>
+            {
+                RunSelectedSorts(
+                    chkBubble, lblBubbleTime,
+                    chkShaker, lblShakerTime,
+                    chkInsertion, lblInsertionTime,
+                    chkQuick, lblQuickTime,
+                    chkBogo, lblBogoTime,
+                    textBoxMaxIterations.Text,
+                    resultTextBox,
+                    statsLabel,
+                    arrayPanel
+                );
+            };
+
+            btnCompareAll.Click += (s, e) =>
+            {
+                CompareAllAlgorithms(
+                    textBoxMaxIterations.Text,
+                    resultTextBox,
+                    statsLabel
+                );
+            };
+
+            // Предупреждение для болотной сортировки
+            chkBogo.CheckedChanged += (s, e) =>
+            {
+                if (chkBogo.Checked)
+                {
+                    if (MessageBox.Show("ВНИМАНИЕ!\nБолотная сортировка имеет факториальную сложность O(n!).\nДля массива из 10 элементов это 3,6 млн итераций.\nДля 11 элементов - 39,9 млн итераций.\nПродолжить?",
+                        "Предупреждение", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.No)
+                    {
+                        chkBogo.Checked = false;
+                    }
+                }
+            };
+
+            // Добавляем элементы на панель
+            panel1.Controls.AddRange(new Control[]
+            {
+        labelArraySize, textBoxArraySize,
+        labelMinValue, textBoxMinValue,
+        labelMaxValue, textBoxMaxValue,
+        labelMaxIterations, textBoxMaxIterations,
+        btnGenerateArray, btnShowArray, btnSelectAll, btnDeselectAll,
+        btnRunSorts, btnCompareAll,
+        groupBoxSorts,
+        labelArray, arrayPanel,
+        resultTextBox,
+        statsLabel
+            });
+
+            // Генерируем начальный массив
+            GenerateRandomArray("100", "-1000", "1000", arrayPanel, statsLabel);
+        }
+
+        // Поля для хранения массивов
+        private int[] currentArray;
+        private int[] originalArray;
+
+        // ГЕНЕРАЦИЯ СЛУЧАЙНОГО МАССИВА
+        private void GenerateRandomArray(string sizeStr, string minStr, string maxStr, Panel arrayPanel, Label statsLabel)
+        {
+            try
+            {
+                int size = int.Parse(sizeStr);
+                int min = int.Parse(minStr);
+                int max = int.Parse(maxStr);
+
+                if (size <= 0)
+                {
+                    statsLabel.Text = "Ошибка: Размер массива должен быть больше 0!";
+                    return;
+                }
+
+                if (min >= max)
+                {
+                    statsLabel.Text = "Ошибка: Минимальное значение должно быть меньше максимального!";
+                    return;
+                }
+
+                if (size > 10000)
+                {
+                    if (MessageBox.Show($"Вы хотите создать массив из {size} элементов.\nЭто может занять много времени. Продолжить?",
+                        "Предупреждение", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.No)
+                    {
+                        return;
+                    }
+                }
+
+                Random rand = new Random();
+                originalArray = new int[size];
+
+                for (int i = 0; i < size; i++)
+                {
+                    originalArray[i] = rand.Next(min, max + 1);
+                }
+
+                currentArray = (int[])originalArray.Clone();
+
+                ShowArrayInPanel(arrayPanel, originalArray);
+
+                statsLabel.Text = $"Массив сгенерирован: {size} элементов, значения от {min} до {max}";
+                statsLabel.ForeColor = Color.DarkGreen;
+            }
+            catch (FormatException)
+            {
+                statsLabel.Text = "Ошибка: Проверьте правильность ввода чисел!";
+                statsLabel.ForeColor = Color.Red;
+            }
+            catch (Exception ex)
+            {
+                statsLabel.Text = $"Ошибка: {ex.Message}";
+                statsLabel.ForeColor = Color.Red;
+            }
+        }
+
+        // ПОКАЗ МАССИВА В ПАНЕЛИ
+        private void ShowArrayInPanel(Panel panel, int[] array)
+        {
+            panel.Controls.Clear();
+
+            if (array == null || array.Length == 0)
+            {
+                var label = new Label { Text = "Массив пуст", Location = new Point(10, 10) };
+                panel.Controls.Add(label);
+                return;
+            }
+
+            int x = 5;
+            int y = 5;
+            int maxWidth = panel.Width - 20;
+            int currentWidth = 0;
+
+            for (int i = 0; i < Math.Min(array.Length, 100); i++) // Показываем только первые 100 элементов
+            {
+                string num = array[i].ToString();
+                var label = new Label
+                {
+                    Text = num,
+                    Location = new Point(x, y),
+                    AutoSize = true,
+                    BorderStyle = BorderStyle.FixedSingle,
+                    BackColor = Color.LightYellow,
+                    Padding = new Padding(2),
+                    Margin = new Padding(1)
+                };
+
+                panel.Controls.Add(label);
+
+                x += label.Width + 5;
+                currentWidth += label.Width + 5;
+
+                if (currentWidth > maxWidth)
+                {
+                    x = 5;
+                    y += 25;
+                    currentWidth = 0;
+                }
+            }
+
+            if (array.Length > 100)
+            {
+                var label = new Label
+                {
+                    Text = $"... и еще {array.Length - 100} элементов",
+                    Location = new Point(10, y + 10),
+                    AutoSize = true,
+                    Font = new Font("Arial", 9, FontStyle.Italic),
+                    ForeColor = Color.Gray
+                };
+                panel.Controls.Add(label);
+            }
+        }
+
+        // ЗАПУСК ВЫБРАННЫХ СОРТИРОВОК
+        private void RunSelectedSorts(CheckBox chkBubble, Label lblBubbleTime, CheckBox chkShaker, Label lblShakerTime, CheckBox chkInsertion, Label lblInsertionTime,
+            CheckBox chkQuick, Label lblQuickTime, CheckBox chkBogo, Label lblBogoTime, string maxIterationsStr, System.Windows.Forms.TextBox resultTextBox,
+            Label statsLabel, Panel arrayPanel)
+        {
+            if (originalArray == null || originalArray.Length == 0)
+            {
+                statsLabel.Text = "Ошибка: Сначала сгенерируйте массив!";
+                statsLabel.ForeColor = Color.Red;
+                return;
+            }
+
+            try
+            {
+                int maxIterations = int.Parse(maxIterationsStr);
+
+                // Сбрасываем метки времени
+                lblBubbleTime.Text = "0 мс";
+                lblShakerTime.Text = "0 мс";
+                lblInsertionTime.Text = "0 мс";
+                lblQuickTime.Text = "0 мс";
+                lblBogoTime.Text = "0 мс";
+
+                List<string> results = new List<string>();
+                results.Add($"=== РЕЗУЛЬТАТЫ СОРТИРОВКИ ({DateTime.Now:HH:mm:ss}) ===\n");
+                results.Add($"Размер массива: {originalArray.Length} элементов\n");
+
+                Stopwatch sw = new Stopwatch();
+
+                // Пузырьковая сортировка
+                if (chkBubble.Checked)
+                {
+                    int[] arr = (int[])originalArray.Clone();
+                    sw.Restart();
+                    BubbleSort(arr, maxIterations);
+                    sw.Stop();
+                    lblBubbleTime.Text = $"{sw.ElapsedMilliseconds} мс";
+                    results.Add($"Пузырьковая: {sw.ElapsedMilliseconds} мс");
+                }
+
+                // Шейкерная сортировка
+                if (chkShaker.Checked)
+                {
+                    int[] arr = (int[])originalArray.Clone();
+                    sw.Restart();
+                    ShakerSort(arr, maxIterations);
+                    sw.Stop();
+                    lblShakerTime.Text = $"{sw.ElapsedMilliseconds} мс";
+                    results.Add($"Шейкерная: {sw.ElapsedMilliseconds} мс");
+                }
+
+                // Сортировка вставками
+                if (chkInsertion.Checked)
+                {
+                    int[] arr = (int[])originalArray.Clone();
+                    sw.Restart();
+                    InsertionSort(arr, maxIterations);
+                    sw.Stop();
+                    lblInsertionTime.Text = $"{sw.ElapsedMilliseconds} мс";
+                    results.Add($"Вставками: {sw.ElapsedMilliseconds} мс");
+                }
+
+                // Быстрая сортировка
+                if (chkQuick.Checked)
+                {
+                    int[] arr = (int[])originalArray.Clone();
+                    sw.Restart();
+                    QuickSort(arr, 0, arr.Length - 1, maxIterations);
+                    sw.Stop();
+                    lblQuickTime.Text = $"{sw.ElapsedMilliseconds} мс";
+                    results.Add($"Быстрая: {sw.ElapsedMilliseconds} мс");
+
+                    // Сохраняем отсортированный массив для отображения
+                    currentArray = arr;
+                }
+
+                // Болотная сортировка (только для маленьких массивов)
+                if (chkBogo.Checked)
+                {
+                    if (originalArray.Length > 25)
+                    {
+                        results.Add($"Болотная: НЕ ВЫПОЛНЕНА (слишком большой массив >25)");
+                        lblBogoTime.Text = ">25 эл.";
+                    }
+                    else
+                    {
+                        int[] arr = (int[])originalArray.Clone();
+                        sw.Restart();
+                        int iterations = BogoSort(arr, maxIterations);
+                        sw.Stop();
+                        lblBogoTime.Text = $"{sw.ElapsedMilliseconds} мс ({iterations} итер.)";
+                        results.Add($"Болотная: {sw.ElapsedMilliseconds} мс ({iterations} итераций)");
+                    }
+                }
+
+                // Выводим результаты
+                resultTextBox.Text = string.Join("\n", results);
+
+                // Показываем отсортированный массив
+                if (currentArray != null && currentArray.Length > 0)
+                {
+                    ShowArrayInPanel(arrayPanel, currentArray);
+                }
+
+                statsLabel.Text = $"Сортировки завершены. Время указано в миллисекундах.";
+                statsLabel.ForeColor = Color.DarkGreen;
+            }
+            catch (Exception ex)
+            {
+                statsLabel.Text = $"Ошибка: {ex.Message}";
+                statsLabel.ForeColor = Color.Red;
+            }
+        }
+
+        // СРАВНЕНИЕ ВСЕХ АЛГОРИТМОВ
+        private void CompareAllAlgorithms(string maxIterationsStr, System.Windows.Forms.TextBox resultTextBox, Label statsLabel)
+        {
+            if (originalArray == null || originalArray.Length == 0)
+            {
+                statsLabel.Text = "Ошибка: Сначала сгенерируйте массив!";
+                statsLabel.ForeColor = Color.Red;
+                return;
+            }
+
+            try
+            {
+                int maxIterations = int.Parse(maxIterationsStr);
+
+                List<AlgorithmResult> results = new List<AlgorithmResult>();
+                Stopwatch sw = new Stopwatch();
+
+                // Пузырьковая
+                int[] arr = (int[])originalArray.Clone();
+                sw.Restart();
+                BubbleSort(arr, maxIterations);
+                sw.Stop();
+                results.Add(new AlgorithmResult("Пузырьковая", sw.ElapsedTicks, sw.ElapsedMilliseconds));
+
+                // Шейкерная
+                arr = (int[])originalArray.Clone();
+                sw.Restart();
+                ShakerSort(arr, maxIterations);
+                sw.Stop();
+                results.Add(new AlgorithmResult("Шейкерная", sw.ElapsedTicks, sw.ElapsedMilliseconds));
+
+                // Вставками
+                arr = (int[])originalArray.Clone();
+                sw.Restart();
+                InsertionSort(arr, maxIterations);
+                sw.Stop();
+                results.Add(new AlgorithmResult("Вставками", sw.ElapsedTicks, sw.ElapsedMilliseconds));
+
+                // Быстрая
+                arr = (int[])originalArray.Clone();
+                sw.Restart();
+                QuickSort(arr, 0, arr.Length - 1, maxIterations);
+                sw.Stop();
+                results.Add(new AlgorithmResult("Быстрая", sw.ElapsedTicks, sw.ElapsedMilliseconds));
+
+                // Болотная (только для маленьких массивов)
+                if (originalArray.Length <= 10)
+                {
+                    arr = (int[])originalArray.Clone();
+                    sw.Restart();
+                    int iterations = BogoSort(arr, maxIterations);
+                    sw.Stop();
+                    results.Add(new AlgorithmResult("Болотная", sw.ElapsedTicks, sw.ElapsedMilliseconds, iterations));
+                }
+
+                // Сортируем результаты по времени
+                results.Sort((a, b) => a.Milliseconds.CompareTo(b.Milliseconds));
+
+                // Формируем отчет
+                StringBuilder report = new StringBuilder();
+                report.AppendLine("=== СРАВНЕНИЕ АЛГОРИТМОВ СОРТИРОВКИ ===");
+                report.AppendLine($"Размер массива: {originalArray.Length} элементов");
+                report.AppendLine($"Дата теста: {DateTime.Now:dd.MM.yyyy HH:mm:ss}");
+                report.AppendLine();
+                report.AppendLine("Рейтинг алгоритмов (от быстрого к медленному):");
+                report.AppendLine();
+
+                for (int i = 0; i < results.Count; i++)
+                {
+                    var result = results[i];
+                    report.AppendLine($"{i + 1}. {result.Name}");
+                    report.AppendLine($"   Время: {result.Milliseconds} мс ({result.Ticks} тиков)");
+                    if (result.Iterations > 0)
+                        report.AppendLine($"   Итераций: {result.Iterations:N0}");
+                    report.AppendLine();
+                }
+
+                report.AppendLine("=== ВЫВОДЫ ===");
+                report.AppendLine($"Самый быстрый: {results[0].Name} ({results[0].Milliseconds} мс)");
+                report.AppendLine($"Самый медленный: {results[results.Count - 1].Name} ({results[results.Count - 1].Milliseconds} мс)");
+                report.AppendLine($"Разница: {results[results.Count - 1].Milliseconds / (double)results[0].Milliseconds:F1}x");
+
+                resultTextBox.Text = report.ToString();
+
+                statsLabel.Text = $"Сравнение завершено. Лучший алгоритм: {results[0].Name}";
+                statsLabel.ForeColor = Color.DarkGreen;
+            }
+            catch (Exception ex)
+            {
+                statsLabel.Text = $"Ошибка при сравнении: {ex.Message}";
+                statsLabel.ForeColor = Color.Red;
+            }
+        }
+
+        // Класс для хранения результатов алгоритма
+        private class AlgorithmResult
+        {
+            public string Name { get; }
+            public long Ticks { get; }
+            public long Milliseconds { get; }
+            public long Iterations { get; }
+
+            public AlgorithmResult(string name, long ticks, long milliseconds, long iterations = 0)
+            {
+                Name = name;
+                Ticks = ticks;
+                Milliseconds = milliseconds;
+                Iterations = iterations;
+            }
+        }
+
+        // 1. ПУЗЫРЬКОВАЯ СОРТИРОВКА
+        private void BubbleSort(int[] array, int maxIterations = 0)
+        {
+            int n = array.Length;
+            int iterations = 0;
+
+            for (int i = 0; i < n - 1; i++)
+            {
+                for (int j = 0; j < n - i - 1; j++)
+                {
+                    if (array[j] > array[j + 1])
+                    {
+                        // Меняем элементы местами
+                        int temp = array[j];
+                        array[j] = array[j + 1];
+                        array[j + 1] = temp;
+                    }
+
+                    iterations++;
+                    if (maxIterations > 0 && iterations >= maxIterations)
+                        return;
+                }
+            }
+        }
+
+        // 2. ШЕЙКЕРНАЯ СОРТИРОВКА (COCKTAIL SHAKER SORT)
+        private void ShakerSort(int[] array, int maxIterations = 0)
+        {
+            bool swapped = true;
+            int start = 0;
+            int end = array.Length - 1;
+            int iterations = 0;
+
+            while (swapped)
+            {
+                swapped = false;
+
+                // Проход слева направо
+                for (int i = start; i < end; i++)
+                {
+                    if (array[i] > array[i + 1])
+                    {
+                        int temp = array[i];
+                        array[i] = array[i + 1];
+                        array[i + 1] = temp;
+                        swapped = true;
+                    }
+
+                    iterations++;
+                    if (maxIterations > 0 && iterations >= maxIterations)
+                        return;
+                }
+
+                if (!swapped)
+                    break;
+
+                swapped = false;
+                end--;
+
+                // Проход справа налево
+                for (int i = end - 1; i >= start; i--)
+                {
+                    if (array[i] > array[i + 1])
+                    {
+                        int temp = array[i];
+                        array[i] = array[i + 1];
+                        array[i + 1] = temp;
+                        swapped = true;
+                    }
+
+                    iterations++;
+                    if (maxIterations > 0 && iterations >= maxIterations)
+                        return;
+                }
+
+                start++;
+            }
+        }
+
+        // 3. СОРТИРОВКА ВСТАВКАМИ
+        private void InsertionSort(int[] array, int maxIterations = 0)
+        {
+            int iterations = 0;
+
+            for (int i = 1; i < array.Length; i++)
+            {
+                int key = array[i];
+                int j = i - 1;
+
+                while (j >= 0 && array[j] > key)
+                {
+                    array[j + 1] = array[j];
+                    j = j - 1;
+
+                    iterations++;
+                    if (maxIterations > 0 && iterations >= maxIterations)
+                        return;
+                }
+
+                array[j + 1] = key;
+                iterations++;
+            }
+        }
+
+        // 4. БЫСТРАЯ СОРТИРОВКА
+        private void QuickSort(int[] array, int low, int high, int maxIterations = 0)
+        {
+            int quickSortIterations = 0;
+
+            if (low < high)
+            {
+                int pi = Partition(array, low, high, ref quickSortIterations, maxIterations);
+
+                if (maxIterations > 0 && quickSortIterations >= maxIterations)
+                    return;
+
+                QuickSort(array, low, pi - 1, maxIterations);
+                QuickSort(array, pi + 1, high, maxIterations);
+            }
+        }
+
+        private int Partition(int[] array, int low, int high, ref int iterations, int maxIterations)
+        {
+            int pivot = array[high];
+            int i = (low - 1);
+
+            for (int j = low; j < high; j++)
+            {
+                if (array[j] < pivot)
+                {
+                    i++;
+
+                    int temp = array[i];
+                    array[i] = array[j];
+                    array[j] = temp;
+                }
+
+                iterations++;
+                if (maxIterations > 0 && iterations >= maxIterations)
+                    return i + 1;
+            }
+
+            int temp1 = array[i + 1];
+            array[i + 1] = array[high];
+            array[high] = temp1;
+
+            return i + 1;
+        }
+
+        // 5. БОЛОТНАЯ СОРТИРОВКА (BOGO SORT)
+        private int BogoSort(int[] array, int maxIterations = 0)
+        {
+            Random rand = new Random();
+            int iterations = 0;
+
+            while (!IsSorted(array))
+            {
+                // Перемешиваем массив случайным образом
+                for (int i = 0; i < array.Length; i++)
+                {
+                    int j = rand.Next(i, array.Length);
+                    int temp = array[i];
+                    array[i] = array[j];
+                    array[j] = temp;
+                }
+
+                iterations++;
+                if (maxIterations > 0 && iterations >= maxIterations)
+                    break;
+            }
+
+            return iterations;
+        }
+
+        // ПРОВЕРКА ОТСОРТИРОВАННОСТИ МАССИВА
+        private bool IsSorted(int[] array)
+        {
+            for (int i = 0; i < array.Length - 1; i++)
+            {
+                if (array[i] > array[i + 1])
+                    return false;
+            }
+            return true;
         }
 
         //********************************************************************************************| РЕШЕНИЕ СЛАУ |****************************************************************************************//
