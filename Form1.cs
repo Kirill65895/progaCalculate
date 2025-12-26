@@ -79,10 +79,10 @@ namespace Programma_2kyrs
                 case 3: // Cортировки
                     InitializeSortingControls();
                     break;
-                case 6: // Решение СЛАУ
-                    InitializeSloughSolutionControls();
+                case 4: // Интеграллы
+                    InitializeDifiniteIntegralControls();
                     break;
-                case 7: // Метод покоординатного спуска
+                case 6: // Метод покоординатного спуска
                     InitializeCoordinateDescentControls();
                     break;
             }
@@ -2590,13 +2590,971 @@ namespace Programma_2kyrs
             return true;
         }
 
-        //********************************************************************************************| РЕШЕНИЕ СЛАУ |****************************************************************************************//
+        //***************************************************************************************| ОПРЕДЕЛЕННЫЙ ИНТЕГРАЛЛ |***********************************************************************************//
 
-        // ИНТЕРФЕЙС (РЕШЕНИЯ СЛАУ)
-        private void InitializeSloughSolutionControls()
+        // ИНТЕРФЕЙС вычисление определенного интеграла
+        // ИНТЕРФЕЙС вычисление определенного интеграла
+        private void InitializeDifiniteIntegralControls()
         {
             // Очищаем панель
             panel1.Controls.Clear();
+
+            // Элементы управления
+
+            var labelFunction = new Label { Text = "Функция f(x):", Location = new Point(10, 10) };
+            var textBoxFunction = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(120, 10),
+                Width = 160,
+                Text = "x^2",
+                BackColor = Color.WhiteSmoke
+            };
+
+            var labelA = new Label { Text = "Нижний предел a:", Location = new Point(10, 40) };
+            var textBoxA = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(120, 40),
+                Width = 160,
+                Text = "0",
+                BackColor = Color.WhiteSmoke
+            };
+
+            var labelB = new Label { Text = "Верхний предел b:", Location = new Point(10, 70) };
+            var textBoxB = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(120, 70),
+                Width = 160,
+                Text = "2",
+                BackColor = Color.WhiteSmoke
+            };
+
+            var labelN = new Label { Text = "Количество разбиений n:", Location = new Point(10, 100), AutoSize = true };
+            var textBoxN = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(180, 100),
+                Width = 100,
+                Text = "1000",
+                BackColor = Color.WhiteSmoke
+            };
+
+            var labelEpsilon = new Label { Text = "Точность ", Location = new Point(10, 130) };
+            var textBoxEpsilon = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(120, 130),
+                Width = 160,
+                Text = "0,0001",
+                BackColor = Color.WhiteSmoke
+            };
+
+            // Группа выбора метода прямоугольников
+            var groupBoxRectangles = new GroupBox
+            {
+                Text = "Метод прямоугольников",
+                Location = new Point(5, 160),
+                Size = new Size(290, 120),
+                BackColor = Color.Lavender
+            };
+
+            var chkRectangles = new CheckBox
+            {
+                Text = "Использовать метод прямоугольников",
+                Location = new Point(10, 20),
+                Width = 250,
+                Checked = true
+            };
+
+            var rbLeftRect = new RadioButton
+            {
+                Text = "Левых прямоугольников",
+                Location = new Point(30, 45),
+                Width = 180,
+                Checked = true
+            };
+
+            var rbRightRect = new RadioButton
+            {
+                Text = "Правых прямоугольников",
+                Location = new Point(30, 70),
+                Width = 180
+            };
+
+            var rbMiddleRect = new RadioButton
+            {
+                Text = "Средних прямоугольников",
+                Location = new Point(30, 95),
+                Width = 180
+            };
+
+            // Метод трапеций
+            var chkTrapezoidal = new CheckBox
+            {
+                Text = "Метод трапеций",
+                Location = new Point(15, 280),
+                Width = 150,
+                Checked = true
+            };
+
+            // Метод Симпсона
+            var chkSimpson = new CheckBox
+            {
+                Text = "Метод Симпсона (парабол)",
+                Location = new Point(15, 310),
+                Width = 180,
+                Checked = true
+            };
+
+            var lblSimpsonNote = new Label
+            {
+                Text = "*требует четное количество разбиений",
+                Location = new Point(15, 333),
+                Font = new Font("Arial", 8),
+                ForeColor = Color.Gray,
+                AutoSize = true
+            };
+
+            // Кнопки
+            var btnCalculate = new System.Windows.Forms.Button
+            {
+                Text = "Вычислить",
+                Location = new Point(15, 360),
+                BackColor = Color.MediumSeaGreen,
+                ForeColor = Color.White,
+                Width = 120,
+                Height = 25
+            };
+
+            var btnAllMethods = new System.Windows.Forms.Button
+            {
+                Text = "Сравнить методы",
+                Location = new Point(145, 360),
+                BackColor = Color.MediumPurple,
+                ForeColor = Color.White,
+                Width = 140,
+                Height = 25
+            };
+
+            var btnDrawGraph = new System.Windows.Forms.Button
+            {
+                Text = "Построить график",
+                Location = new Point(15, 390),
+                BackColor = Color.LightBlue,
+                Width = 120,
+                Height = 25
+            };
+
+            // Панель для результатов
+            var resultPanel = new Panel
+            {
+                Location = new Point(320, 30),
+                Size = new Size(450, 140),
+                BorderStyle = BorderStyle.FixedSingle,
+                AutoScroll = true,
+                BackColor = Color.WhiteSmoke
+            };
+
+            var resultLabel = new Label
+            {
+                Text = "Результаты вычислений:",
+                Location = new Point(320, 10),
+                AutoSize = true,
+                Font = new Font("Arial", 10, FontStyle.Bold)
+            };
+
+            // Панель для графика
+            var graphPanel = new Panel
+            {
+                Location = new Point(320, 210),
+                Size = new Size(450, 260),
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = Color.White
+            };
+
+            var graphLabel = new Label
+            {
+                Text = "График интегрируемой функции",
+                Location = new Point(320, 190),
+                AutoSize = true,
+                Font = new Font("Arial", 10, FontStyle.Bold)
+            };
+
+            // Точное значение интеграла (для аналитических функций)
+            var labelExact = new Label
+            {
+                Text = "Точное значение (если известно):",
+                Location = new Point(10, 420),
+                AutoSize = true,
+                Font = new Font("Arial", 9, FontStyle.Italic)
+            };
+
+            var textBoxExact = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(220, 419),
+                Width = 61,
+                Text = "",
+                BackColor = Color.LightYellow
+            };
+
+            // Добавляем элементы в группу прямоугольников
+            groupBoxRectangles.Controls.Add(chkRectangles);
+            groupBoxRectangles.Controls.Add(rbLeftRect);
+            groupBoxRectangles.Controls.Add(rbRightRect);
+            groupBoxRectangles.Controls.Add(rbMiddleRect);
+
+            // Обработчики событий
+            btnCalculate.Click += (s, e) =>
+            {
+                CalculateIntegral(
+                    textBoxFunction.Text,
+                    textBoxA.Text,
+                    textBoxB.Text,
+                    textBoxN.Text,
+                    textBoxEpsilon.Text,
+                    chkRectangles.Checked,
+                    rbLeftRect.Checked,
+                    rbRightRect.Checked,
+                    rbMiddleRect.Checked,
+                    chkTrapezoidal.Checked,
+                    chkSimpson.Checked,
+                    resultPanel,
+                    textBoxExact.Text
+                );
+            };
+
+            btnAllMethods.Click += (s, e) =>
+            {
+                CalculateAllMethods(
+                    textBoxFunction.Text,
+                    textBoxA.Text,
+                    textBoxB.Text,
+                    textBoxN.Text,
+                    textBoxEpsilon.Text,
+                    resultPanel,
+                    textBoxExact.Text
+                );
+            };
+
+            btnDrawGraph.Click += (s, e) =>
+            {
+                DrawIntegralGraph(
+                    graphPanel,
+                    textBoxFunction.Text,
+                    textBoxA.Text,
+                    textBoxB.Text
+                );
+            };
+
+            // Автоматическое вычисление точного значения для некоторых функций
+            textBoxFunction.TextChanged += (s, e) =>
+            {
+                UpdateExactValue(textBoxFunction.Text, textBoxA.Text, textBoxB.Text, textBoxExact);
+            };
+
+            textBoxA.TextChanged += (s, e) =>
+            {
+                UpdateExactValue(textBoxFunction.Text, textBoxA.Text, textBoxB.Text, textBoxExact);
+            };
+
+            textBoxB.TextChanged += (s, e) =>
+            {
+                UpdateExactValue(textBoxFunction.Text, textBoxA.Text, textBoxB.Text, textBoxExact);
+            };
+
+            // Добавляем элементы на панель
+            panel1.Controls.AddRange(new Control[]
+            {
+        labelFunction, textBoxFunction,
+        labelA, textBoxA,
+        labelB, textBoxB,
+        labelN, textBoxN,
+        labelEpsilon, textBoxEpsilon,
+        groupBoxRectangles,
+        chkTrapezoidal,
+        chkSimpson, lblSimpsonNote,
+        btnCalculate, btnAllMethods, btnDrawGraph,
+        resultLabel, resultPanel,
+        graphLabel, graphPanel,
+        labelExact, textBoxExact
+            });
+
+            // Обновляем точное значение
+            UpdateExactValue("x^2", "0", "2", textBoxExact);
+        }
+
+        // ВЫЧИСЛЕНИЕ ИНТЕГРАЛА ВЫБРАННЫМИ МЕТОДАМИ
+        private void CalculateIntegral(string functionStr, string aStr, string bStr, string nStr, string epsilonStr, bool useRectangles, bool leftRect,
+            bool rightRect, bool middleRect, bool useTrapezoidal, bool useSimpson, Panel resultPanel, string exactValueStr)
+        {
+            resultPanel.Controls.Clear();
+
+            try
+            {
+                double a = double.Parse(aStr);
+                double b = double.Parse(bStr);
+                int n = int.Parse(nStr);
+                double epsilon = double.Parse(epsilonStr);
+
+                if (a >= b)
+                {
+                    AddResultLabel(resultPanel, "Ошибка: a должно быть меньше b!", Color.Red);
+                    return;
+                }
+
+                if (n <= 0)
+                {
+                    AddResultLabel(resultPanel, "Ошибка: количество разбиений должно быть > 0!", Color.Red);
+                    return;
+                }
+
+                if (epsilon <= 0)
+                {
+                    AddResultLabel(resultPanel, "Ошибка: точность должна быть > 0!", Color.Red);
+                    return;
+                }
+
+                // Проверка для метода Симпсона
+                if (useSimpson && n % 2 != 0)
+                {
+                    AddResultLabel(resultPanel, "Для метода Симпсона n должно быть четным!", Color.Orange);
+                    n++; // Делаем четным
+                    AddResultLabel(resultPanel, $"n увеличено до {n} для метода Симпсона", Color.DarkOrange);
+                }
+
+                List<string> results = new List<string>();
+                results.Add($"=== ВЫЧИСЛЕНИЕ ИНТЕГРАЛА ===\n");
+                results.Add($"Функция: f(x) = {functionStr}");
+                results.Add($"Пределы: [{a}; {b}]");
+                results.Add($"Количество разбиений: {n}\n");
+
+                double exactValue = 0;
+                bool hasExactValue = false;
+
+                // Пробуем получить точное значение
+                if (!string.IsNullOrWhiteSpace(exactValueStr))
+                {
+                    if (double.TryParse(exactValueStr, out exactValue))
+                    {
+                        hasExactValue = true;
+                        results.Add($"Точное значение: {exactValue:F10}");
+                    }
+                }
+
+                // Метод прямоугольников
+                if (useRectangles)
+                {
+                    double rectResult = 0;
+                    string rectType = "";
+
+                    if (leftRect)
+                    {
+                        rectResult = RectangleLeftMethod(functionStr, a, b, n);
+                        rectType = "левых прямоугольников";
+                    }
+                    else if (rightRect)
+                    {
+                        rectResult = RectangleRightMethod(functionStr, a, b, n);
+                        rectType = "правых прямоугольников";
+                    }
+                    else if (middleRect)
+                    {
+                        rectResult = RectangleMiddleMethod(functionStr, a, b, n);
+                        rectType = "средних прямоугольников";
+                    }
+
+                    results.Add($"Метод {rectType}: {rectResult:F10}");
+
+                    if (hasExactValue)
+                    {
+                        double error = Math.Abs(rectResult - exactValue);
+                        double relativeError = (error / Math.Abs(exactValue)) * 100;
+                        results.Add($"  Погрешность: {error:E4} ({relativeError:F4}%)");
+                    }
+                }
+
+                // Метод трапеций
+                if (useTrapezoidal)
+                {
+                    double trapResult = TrapezoidalMethod(functionStr, a, b, n);
+                    results.Add($"Метод трапеций: {trapResult:F10}");
+
+                    if (hasExactValue)
+                    {
+                        double error = Math.Abs(trapResult - exactValue);
+                        double relativeError = (error / Math.Abs(exactValue)) * 100;
+                        results.Add($"  Погрешность: {error:E4} ({relativeError:F4}%)");
+                    }
+                }
+
+                // Метод Симпсона
+                if (useSimpson)
+                {
+                    double simpResult = SimpsonMethod(functionStr, a, b, n);
+                    results.Add($"Метод Симпсона: {simpResult:F10}");
+
+                    if (hasExactValue)
+                    {
+                        double error = Math.Abs(simpResult - exactValue);
+                        double relativeError = (error / Math.Abs(exactValue)) * 100;
+                        results.Add($"  Погрешность: {error:E4} ({relativeError:F4}%)");
+                    }
+                }
+
+                // Вывод результатов
+                DisplayResults(resultPanel, results);
+
+                // Если есть точное значение, показываем лучший метод
+                if (hasExactValue && (useRectangles || useTrapezoidal || useSimpson))
+                {
+                    ShowBestMethod(resultPanel, functionStr, a, b, n, exactValue);
+                }
+            }
+            catch (FormatException)
+            {
+                AddResultLabel(resultPanel, "Ошибка: Проверьте правильность ввода чисел!", Color.Red);
+            }
+            catch (Exception ex)
+            {
+                AddResultLabel(resultPanel, $"Ошибка: {ex.Message}", Color.Red);
+            }
+        }
+
+        // ВЫЧИСЛЕНИЕ ВСЕМИ МЕТОДАМИ
+        private void CalculateAllMethods(string functionStr, string aStr, string bStr, string nStr, string epsilonStr, Panel resultPanel, string exactValueStr)
+        {
+            resultPanel.Controls.Clear();
+
+            try
+            {
+                double a = double.Parse(aStr);
+                double b = double.Parse(bStr);
+                int n = int.Parse(nStr);
+                double epsilon = double.Parse(epsilonStr);
+
+                if (a >= b)
+                {
+                    AddResultLabel(resultPanel, "Ошибка: a должно быть меньше b!", Color.Red);
+                    return;
+                }
+
+                if (n <= 0)
+                {
+                    AddResultLabel(resultPanel, "Ошибка: количество разбиений должно быть > 0!", Color.Red);
+                    return;
+                }
+
+                // Для Симпсона делаем n четным
+                if (n % 2 != 0) n++;
+
+                List<string> results = new List<string>();
+                results.Add($"=== СРАВНЕНИЕ МЕТОДОВ ИНТЕГРИРОВАНИЯ ===\n");
+                results.Add($"Функция: f(x) = {functionStr}");
+                results.Add($"Пределы: [{a}; {b}]");
+                results.Add($"Количество разбиений: {n}\n");
+
+                double exactValue = 0;
+                bool hasExactValue = false;
+
+                // Пробуем получить точное значение
+                if (!string.IsNullOrWhiteSpace(exactValueStr))
+                {
+                    if (double.TryParse(exactValueStr, out exactValue))
+                    {
+                        hasExactValue = true;
+                        results.Add($"Точное значение: {exactValue:F15}\n");
+                    }
+                }
+
+                // Вычисляем всеми методами
+                List<MethodResult> methodResults = new List<MethodResult>();
+
+                // Метод левых прямоугольников
+                double leftRect = RectangleLeftMethod(functionStr, a, b, n);
+                methodResults.Add(new MethodResult("Левых прямоугольников", leftRect));
+
+                // Метод правых прямоугольников
+                double rightRect = RectangleRightMethod(functionStr, a, b, n);
+                methodResults.Add(new MethodResult("Правых прямоугольников", rightRect));
+
+                // Метод средних прямоугольников
+                double middleRect = RectangleMiddleMethod(functionStr, a, b, n);
+                methodResults.Add(new MethodResult("Средних прямоугольников", middleRect));
+
+                // Метод трапеций
+                double trapezoidal = TrapezoidalMethod(functionStr, a, b, n);
+                methodResults.Add(new MethodResult("Трапеций", trapezoidal));
+
+                // Метод Симпсона
+                double simpson = SimpsonMethod(functionStr, a, b, n);
+                methodResults.Add(new MethodResult("Симпсона", simpson));
+
+                // Добавляем результаты в список
+                foreach (var method in methodResults)
+                {
+                    results.Add($"{method.Name}:");
+                    results.Add($"  Значение: {method.Value:F15}");
+
+                    if (hasExactValue)
+                    {
+                        double error = Math.Abs(method.Value - exactValue);
+                        double relativeError = (error / Math.Abs(exactValue)) * 100;
+                        method.Error = error;
+                        results.Add($"  Абс. погрешность: {error:E6}");
+                        results.Add($"  Отн. погрешность: {relativeError:F6}%\n");
+                    }
+                    else
+                    {
+                        results.Add("");
+                    }
+                }
+
+                // Сортируем по точности (если есть точное значение)
+                if (hasExactValue)
+                {
+                    methodResults.Sort((x, y) => x.Error.CompareTo(y.Error));
+
+                    results.Add("\n=== РЕЙТИНГ ТОЧНОСТИ ===");
+                    for (int i = 0; i < methodResults.Count; i++)
+                    {
+                        var method = methodResults[i];
+                        results.Add($"{i + 1}. {method.Name}");
+                        results.Add($"   Погрешность: {method.Error:E6}");
+                    }
+
+                    results.Add($"\nЛучший метод: {methodResults[0].Name}");
+                    results.Add($"Худший метод: {methodResults[methodResults.Count - 1].Name}");
+                    results.Add($"Разница в точности: {methodResults[methodResults.Count - 1].Error / methodResults[0].Error:F1}x");
+                }
+
+                // Выводим результаты
+                DisplayResults(resultPanel, results);
+            }
+            catch (Exception ex)
+            {
+                AddResultLabel(resultPanel, $"Ошибка: {ex.Message}", Color.Red);
+            }
+        }
+
+        // Класс для хранения результатов методов
+        private class MethodResult
+        {
+            public string Name { get; }
+            public double Value { get; }
+            public double Error { get; set; }
+
+            public MethodResult(string name, double value)
+            {
+                Name = name;
+                Value = value;
+                Error = 0;
+            }
+        }
+
+        // 1. МЕТОД ЛЕВЫХ ПРЯМОУГОЛЬНИКОВ
+        private double RectangleLeftMethod(string functionStr, double a, double b, int n)
+        {
+            double h = (b - a) / n;
+            double sum = 0;
+
+            for (int i = 0; i < n; i++)
+            {
+                double x = a + i * h;
+                sum += EvaluateMathExpression(functionStr, x);
+            }
+
+            return sum * h;
+        }
+
+        // 2. МЕТОД ПРАВЫХ ПРЯМОУГОЛЬНИКОВ
+        private double RectangleRightMethod(string functionStr, double a, double b, int n)
+        {
+            double h = (b - a) / n;
+            double sum = 0;
+
+            for (int i = 1; i <= n; i++)
+            {
+                double x = a + i * h;
+                sum += EvaluateMathExpression(functionStr, x);
+            }
+
+            return sum * h;
+        }
+
+        // 3. МЕТОД СРЕДНИХ ПРЯМОУГОЛЬНИКОВ
+        private double RectangleMiddleMethod(string functionStr, double a, double b, int n)
+        {
+            double h = (b - a) / n;
+            double sum = 0;
+
+            for (int i = 0; i < n; i++)
+            {
+                double x = a + (i + 0.5) * h;
+                sum += EvaluateMathExpression(functionStr, x);
+            }
+
+            return sum * h;
+        }
+
+        // 4. МЕТОД ТРАПЕЦИЙ
+        private double TrapezoidalMethod(string functionStr, double a, double b, int n)
+        {
+            double h = (b - a) / n;
+            double sum = (EvaluateMathExpression(functionStr, a) + EvaluateMathExpression(functionStr, b)) / 2;
+
+            for (int i = 1; i < n; i++)
+            {
+                double x = a + i * h;
+                sum += EvaluateMathExpression(functionStr, x);
+            }
+
+            return sum * h;
+        }
+
+        // 5. МЕТОД СИМПСОНА (ПАРАБОЛ)
+        private double SimpsonMethod(string functionStr, double a, double b, int n)
+        {
+            if (n % 2 != 0) n++; // Делаем четным
+
+            double h = (b - a) / n;
+            double sum = EvaluateMathExpression(functionStr, a) + EvaluateMathExpression(functionStr, b);
+
+            // Сумма для нечетных индексов
+            for (int i = 1; i < n; i += 2)
+            {
+                double x = a + i * h;
+                sum += 4 * EvaluateMathExpression(functionStr, x);
+            }
+
+            // Сумма для четных индексов
+            for (int i = 2; i < n; i += 2)
+            {
+                double x = a + i * h;
+                sum += 2 * EvaluateMathExpression(functionStr, x);
+            }
+
+            return sum * h / 3;
+        }
+
+        // ОТОБРАЖЕНИЕ РЕЗУЛЬТАТОВ
+        private void DisplayResults(Panel panel, List<string> results)
+        {
+            panel.Controls.Clear();
+
+            int y = 10;
+            foreach (string line in results)
+            {
+                var label = new Label
+                {
+                    Text = line,
+                    Location = new Point(10, y),
+                    AutoSize = true,
+                    Font = new Font("Consolas", 9),
+                    ForeColor = Color.Black
+                };
+
+                panel.Controls.Add(label);
+                y += 20;
+            }
+        }
+
+        private void AddResultLabel(Panel panel, string text, Color color)
+        {
+            var label = new Label
+            {
+                Text = text,
+                Location = new Point(10, 10),
+                AutoSize = true,
+                Font = new Font("Arial", 10),
+                ForeColor = color
+            };
+
+            panel.Controls.Add(label);
+        }
+
+        // ПОКАЗ ЛУЧШЕГО МЕТОДА
+        private void ShowBestMethod(Panel panel, string functionStr, double a, double b, int n, double exactValue)
+        {
+            // Вычисляем всеми методами
+            double[] results = new double[5];
+            string[] names = new string[5]
+            {
+        "Левых прямоугольников",
+        "Правых прямоугольников",
+        "Средних прямоугольников",
+        "Трапеций",
+        "Симпсона"
+            };
+
+            results[0] = RectangleLeftMethod(functionStr, a, b, n);
+            results[1] = RectangleRightMethod(functionStr, a, b, n);
+            results[2] = RectangleMiddleMethod(functionStr, a, b, n);
+            results[3] = TrapezoidalMethod(functionStr, a, b, n);
+            results[4] = SimpsonMethod(functionStr, a, b, n);
+
+            // Находим лучший метод (наименьшая погрешность)
+            int bestIndex = 0;
+            double bestError = Math.Abs(results[0] - exactValue);
+
+            for (int i = 1; i < results.Length; i++)
+            {
+                double error = Math.Abs(results[i] - exactValue);
+                if (error < bestError)
+                {
+                    bestError = error;
+                    bestIndex = i;
+                }
+            }
+
+            var bestLabel = new Label
+            {
+                Text = $"\n✓ Лучший метод: {names[bestIndex]}\n   Погрешность: {bestError:E6}",
+                Location = new Point(10, panel.Controls.Count * 20 + 20),
+                AutoSize = true,
+                Font = new Font("Arial", 10, FontStyle.Bold),
+                ForeColor = Color.DarkGreen
+            };
+
+            panel.Controls.Add(bestLabel);
+        }
+
+        // ПОСТРОЕНИЕ ГРАФИКА ИНТЕГРАЛА
+        private void DrawIntegralGraph(Panel panel, string functionStr, string aStr, string bStr)
+        {
+            try
+            {
+                double a = double.Parse(aStr);
+                double b = double.Parse(bStr);
+
+                panel.Paint += (sender, e) =>
+                {
+                    DrawIntegralFunction(e.Graphics, panel.ClientRectangle, functionStr, a, b);
+                };
+
+                panel.Invalidate(); // Перерисовываем
+            }
+            catch
+            {
+                // Игнорируем ошибки
+            }
+        }
+
+        // ОТРИСОВКА ГРАФИКА ИНТЕГРИРУЕМОЙ ФУНКЦИИ
+        private void DrawIntegralFunction(Graphics g, Rectangle drawingArea, string functionStr, double a, double b)
+        {
+            g.Clear(Color.White);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            int padding = 30;
+            Rectangle graphArea = new Rectangle(
+                drawingArea.Left + padding,
+                drawingArea.Top + padding,
+                drawingArea.Width - 2 * padding,
+                drawingArea.Height - 2 * padding
+            );
+
+            // Сетка и оси
+            DrawGrid(g, graphArea);
+            DrawAxes(g, graphArea);
+
+            // Вычисляем диапазон значений функции
+            double minY = double.MaxValue;
+            double maxY = double.MinValue;
+            int samples = 100;
+
+            for (int i = 0; i <= samples; i++)
+            {
+                double x = a + (b - a) * i / samples;
+                try
+                {
+                    double y = EvaluateMathExpression(functionStr, x);
+                    minY = Math.Min(minY, y);
+                    maxY = Math.Max(maxY, y);
+                }
+                catch { }
+            }
+
+            // Добавляем немного места сверху и снизу
+            double rangeY = maxY - minY;
+            minY -= rangeY * 0.1;
+            maxY += rangeY * 0.1;
+
+            // Масштаб
+            float scaleX = graphArea.Width / (float)(b - a);
+            float scaleY = graphArea.Height / (float)(maxY - minY);
+
+            // Центр координат
+            PointF origin = new PointF(
+                graphArea.Left - (float)(a * scaleX),
+                graphArea.Bottom + (float)(minY * scaleY)
+            );
+
+            // Рисуем функцию
+            using (Pen graphPen = new Pen(Color.Blue, 2))
+            {
+                PointF? lastPoint = null;
+
+                for (int i = 0; i <= graphArea.Width; i++)
+                {
+                    double x = a + (b - a) * i / graphArea.Width;
+
+                    try
+                    {
+                        double y = EvaluateMathExpression(functionStr, x);
+
+                        float screenX = origin.X + (float)(x * scaleX);
+                        float screenY = origin.Y - (float)(y * scaleY);
+
+                        PointF currentPoint = new PointF(screenX, screenY);
+
+                        if (lastPoint.HasValue)
+                        {
+                            g.DrawLine(graphPen, lastPoint.Value, currentPoint);
+                        }
+
+                        lastPoint = currentPoint;
+                    }
+                    catch
+                    {
+                        lastPoint = null;
+                    }
+                }
+            }
+
+            // Закрашиваем область под кривой (интеграл)
+            using (Brush integralBrush = new SolidBrush(Color.FromArgb(100, Color.LightBlue)))
+            {
+                List<PointF> points = new List<PointF>();
+
+                // Начинаем с левого нижнего угла
+                points.Add(new PointF(origin.X + (float)(a * scaleX), origin.Y));
+
+                // Добавляем точки функции
+                for (int i = 0; i <= graphArea.Width; i++)
+                {
+                    double x = a + (b - a) * i / graphArea.Width;
+                    try
+                    {
+                        double y = EvaluateMathExpression(functionStr, x);
+                        float screenX = origin.X + (float)(x * scaleX);
+                        float screenY = origin.Y - (float)(y * scaleY);
+                        points.Add(new PointF(screenX, screenY));
+                    }
+                    catch { }
+                }
+
+                // Заканчиваем правым нижним углом
+                points.Add(new PointF(origin.X + (float)(b * scaleX), origin.Y));
+
+                // Рисуем заполненную область
+                if (points.Count > 2)
+                {
+                    g.FillPolygon(integralBrush, points.ToArray());
+                }
+            }
+
+            // Подписи
+            Font labelFont = new Font("Arial", 9);
+            g.DrawString($"∫f(x)dx на [{a:F2}, {b:F2}]",
+                new Font("Arial", 10, FontStyle.Bold), Brushes.DarkBlue,
+                graphArea.Left, drawingArea.Top + 5);
+
+            g.DrawString($"f(x) = {functionStr}", labelFont, Brushes.Black,
+                graphArea.Left, drawingArea.Top + 25);
+        }
+
+        // ОБНОВЛЕНИЕ ТОЧНОГО ЗНАЧЕНИЯ ИНТЕГРАЛА
+        private void UpdateExactValue(string functionStr, string aStr, string bStr, System.Windows.Forms.TextBox exactTextBox)
+        {
+            try
+            {
+                double a = double.Parse(aStr);
+                double b = double.Parse(bStr);
+
+                // Для некоторых известных функций вычисляем точный интеграл
+                functionStr = functionStr.ToLower().Replace(" ", "");
+
+                double exactValue = 0;
+                bool calculated = false;
+
+                if (functionStr == "x")
+                {
+                    exactValue = (b * b - a * a) / 2;
+                    calculated = true;
+                }
+                else if (functionStr == "x^2" || functionStr == "x*x")
+                {
+                    exactValue = (b * b * b - a * a * a) / 3;
+                    calculated = true;
+                }
+                else if (functionStr == "x^3")
+                {
+                    exactValue = (b * b * b * b - a * a * a * a) / 4;
+                    calculated = true;
+                }
+                else if (functionStr == "sin(x)")
+                {
+                    exactValue = Math.Cos(a) - Math.Cos(b);
+                    calculated = true;
+                }
+                else if (functionStr == "cos(x)")
+                {
+                    exactValue = Math.Sin(b) - Math.Sin(a);
+                    calculated = true;
+                }
+                else if (functionStr == "e^x" || functionStr == "exp(x)")
+                {
+                    exactValue = Math.Exp(b) - Math.Exp(a);
+                    calculated = true;
+                }
+                else if (functionStr == "1/x")
+                {
+                    if (a > 0 && b > 0)
+                    {
+                        exactValue = Math.Log(b) - Math.Log(a);
+                        calculated = true;
+                    }
+                }
+
+                if (calculated)
+                {
+                    exactTextBox.Text = exactValue.ToString("F10");
+                    exactTextBox.BackColor = Color.LightGreen;
+                }
+                else
+                {
+                    exactTextBox.Text = "";
+                    exactTextBox.BackColor = Color.LightYellow;
+                }
+            }
+            catch
+            {
+                exactTextBox.Text = "";
+                exactTextBox.BackColor = Color.LightYellow;
+            }
+        }
+
+        // АДАПТИВНЫЙ МЕТОД (автоматический выбор шага для заданной точности)
+        private double AdaptiveIntegration(string functionStr, double a, double b, double epsilon,
+            Func<string, double, double, int, double> integrationMethod)
+        {
+            int n = 10; // Начальное количество разбиений
+            double prevResult = integrationMethod(functionStr, a, b, n);
+            double currentResult;
+
+            do
+            {
+                n *= 2; // Удваиваем количество разбиений
+                currentResult = integrationMethod(functionStr, a, b, n);
+
+                if (Math.Abs(currentResult - prevResult) < epsilon)
+                    break;
+
+                prevResult = currentResult;
+
+                // Защита от бесконечного цикла
+                if (n > 1000000) break;
+
+            } while (true);
+
+            return currentResult;
         }
 
         //*************************************************************************************| МЕТОД ПОКООРДИНАТНОГО СПУСКА |*******************************************************************************//
