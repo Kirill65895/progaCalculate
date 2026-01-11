@@ -45,12 +45,6 @@ namespace Programma_2kyrs
 
         //*****************************************************************************| ТО ЧТО НЕ ВИДИТ ПОЛЬЗОВАТЕЛЬ И ЕМУ НЕ НАДО |***********************************************************************//
 
-        // ФОРМА
-        private void Form1_Load(object sender, EventArgs e)
-        {
-
-        }
-
         // ПАНЕЛЬ ВЫБОРА ЗАДАНИЯ
         private void InitializeWindowComboBox()
         {
@@ -5132,13 +5126,889 @@ namespace Programma_2kyrs
                 graphArea.Left, graphArea.Bottom + 5);
         }
 
-        //***************************************************************************************| МЕТОД наименьших квадратов |*******************************************************************************//
+        //***************************************************************************************| МЕТОД НАИМЕНЬШИХ КВАДРАТОВ |*****************************************************************************//
 
         // ИНТЕРФЕЙС
         private void InitializeLeastSquares()
         {
             // Очищаем панель
             panel1.Controls.Clear();
+
+            // Данные для аппроксимации
+            List<PointF> dataPoints = new List<PointF>();
+            List<double> coefficients = new List<double>();
+            string currentLSFunction = "";
+
+            // Группа для ввода данных
+            var groupBoxData = new GroupBox
+            {
+                Text = "Ввод данных (точки x,y)",
+                Location = new Point(10, 10),
+                Size = new Size(310, 120),
+                BackColor = Color.Lavender
+            };
+
+            var labelX = new Label { Text = "X:", Location = new Point(10, 25), AutoSize = true };
+            var textBoxX = new System.Windows.Forms.TextBox { Location = new Point(30, 25), Width = 70, BackColor = Color.WhiteSmoke };
+
+            var labelY = new Label { Text = "Y:", Location = new Point(110, 25), AutoSize = true };
+            var textBoxY = new System.Windows.Forms.TextBox { Location = new Point(130, 25), Width = 70, BackColor = Color.WhiteSmoke };
+
+            var btnAddPoint = new System.Windows.Forms.Button
+            {
+                Text = "Добавить точку",
+                Location = new Point(210, 23),
+                BackColor = Color.LightBlue,
+                Width = 90,
+                Height = 25
+            };
+
+            var btnClearPoints = new System.Windows.Forms.Button
+            {
+                Text = "Очистить все",
+                Location = new Point(210, 53),
+                BackColor = Color.LightCoral,
+                Width = 90,
+                Height = 25
+            };
+
+            var btnGenerateRandom = new System.Windows.Forms.Button
+            {
+                Text = "Случайные",
+                Location = new Point(210, 83),
+                BackColor = Color.LightGreen,
+                Width = 90,
+                Height = 25
+            };
+
+            // Список точек
+            var listBoxPoints = new ListBox
+            {
+                Location = new Point(10, 55),
+                Size = new Size(190, 60),
+                BackColor = Color.WhiteSmoke
+            };
+
+            groupBoxData.Controls.AddRange(new Control[] { labelX, textBoxX, labelY, textBoxY, btnAddPoint,
+        btnClearPoints, btnGenerateRandom, listBoxPoints });
+
+            // Группа для выбора типа аппроксимации
+            var groupBoxApprox = new GroupBox
+            {
+                Text = "Тип аппроксимации",
+                Location = new Point(10, 140),
+                Size = new Size(310, 120),
+                BackColor = Color.Lavender
+            };
+
+            var rbLinear = new RadioButton { Text = "Линейная (y = a + b*x)", Location = new Point(10, 20), Width = 200, Checked = true };
+            var rbQuadratic = new RadioButton { Text = "Квадратичная (y = a + b*x + c*x²)", Location = new Point(10, 45), Width = 250 };
+            var rbCubic = new RadioButton { Text = "Кубическая (y = a + b*x + c*x² + d*x³)", Location = new Point(10, 70), Width = 280 };
+            var rbExponential = new RadioButton { Text = "Экспоненциальная (y = a*e^(b*x))", Location = new Point(10, 95), Width = 250 };
+
+            groupBoxApprox.Controls.AddRange(new Control[] { rbLinear, rbQuadratic, rbCubic, rbExponential });
+
+            // Кнопки расчета
+            var btnCalculate = new System.Windows.Forms.Button
+            {
+                Text = "Рассчитать",
+                Location = new Point(10, 270),
+                BackColor = Color.MediumSeaGreen,
+                ForeColor = Color.White,
+                Width = 150,
+                Height = 30
+            };
+
+            var btnExample1 = new System.Windows.Forms.Button
+            {
+                Text = "Пример 1: Линейная",
+                Location = new Point(170, 270),
+                BackColor = Color.LightBlue,
+                Width = 150,
+                Height = 30
+            };
+
+            var btnExample2 = new System.Windows.Forms.Button
+            {
+                Text = "Пример 2: Квадратичная",
+                Location = new Point(10, 300),
+                BackColor = Color.LightBlue,
+                Width = 150,
+                Height = 30
+            };
+
+            var btnExample3 = new System.Windows.Forms.Button
+            {
+                Text = "Пример 3: Экспонента",
+                Location = new Point(170, 300),
+                BackColor = Color.LightBlue,
+                Width = 150,
+                Height = 30
+            };
+
+            // Панель для результатов
+            var resultPanel = new Panel
+            {
+                Location = new Point(10, 340),
+                Size = new Size(310, 130),
+                BorderStyle = BorderStyle.FixedSingle,
+                AutoScroll = true,
+                BackColor = Color.WhiteSmoke
+            };
+
+            // Панель для графика
+            var graphPanel = new Panel
+            {
+                Location = new Point(330, 10),
+                Size = new Size(440, 460),
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = Color.White
+            };
+
+            // Обработчики событий
+            btnAddPoint.Click += (s, e) =>
+            {
+                try
+                {
+                    float x = float.Parse(textBoxX.Text);
+                    float y = float.Parse(textBoxY.Text);
+
+                    dataPoints.Add(new PointF(x, y));
+                    listBoxPoints.Items.Add($"({x:F2}, {y:F2})");
+
+                    textBoxX.Text = "";
+                    textBoxY.Text = "";
+                    textBoxX.Focus();
+                }
+                catch
+                {
+                    MessageBox.Show("Введите корректные числа!", "Ошибка",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            };
+
+            btnClearPoints.Click += (s, e) =>
+            {
+                dataPoints.Clear();
+                listBoxPoints.Items.Clear();
+                coefficients.Clear();
+                graphPanel.Invalidate();
+                resultPanel.Controls.Clear();
+            };
+
+            btnGenerateRandom.Click += (s, e) =>
+            {
+                dataPoints.Clear();
+                listBoxPoints.Items.Clear();
+
+                Random rand = new Random();
+                int count = rand.Next(5, 15);
+
+                for (int i = 0; i < count; i++)
+                {
+                    float x = i * 2 + rand.Next(-5, 5) * 0.5f;
+                    float y = 2 * x + 3 + rand.Next(-10, 10) * 0.5f;
+                    dataPoints.Add(new PointF(x, y));
+                    listBoxPoints.Items.Add($"({x:F2}, {y:F2})");
+                }
+            };
+
+            // Примеры данных
+            btnExample1.Click += (s, e) =>
+            {
+                dataPoints.Clear();
+                listBoxPoints.Items.Clear();
+
+                // Линейная зависимость с шумом
+                float[] xVals = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+                float[] yVals = { 2.1f, 4.3f, 5.8f, 8.2f, 9.9f, 11.5f, 13.8f, 15.1f, 17.4f, 19.2f };
+
+                for (int i = 0; i < xVals.Length; i++)
+                {
+                    dataPoints.Add(new PointF(xVals[i], yVals[i]));
+                    listBoxPoints.Items.Add($"({xVals[i]:F2}, {yVals[i]:F2})");
+                }
+
+                rbLinear.Checked = true;
+            };
+
+            btnExample2.Click += (s, e) =>
+            {
+                dataPoints.Clear();
+                listBoxPoints.Items.Clear();
+
+                // Квадратичная зависимость
+                float[] xVals = { -3, -2, -1, 0, 1, 2, 3, 4 };
+                float[] yVals = { 10.5f, 3.8f, 0.9f, 1.2f, 2.5f, 6.8f, 12.3f, 20.6f };
+
+                for (int i = 0; i < xVals.Length; i++)
+                {
+                    dataPoints.Add(new PointF(xVals[i], yVals[i]));
+                    listBoxPoints.Items.Add($"({xVals[i]:F2}, {yVals[i]:F2})");
+                }
+
+                rbQuadratic.Checked = true;
+            };
+
+            btnExample3.Click += (s, e) =>
+            {
+                dataPoints.Clear();
+                listBoxPoints.Items.Clear();
+
+                // Экспоненциальная зависимость
+                float[] xVals = { 0, 1, 2, 3, 4, 5 };
+                float[] yVals = { 1.2f, 3.3f, 9.1f, 25.4f, 68.3f, 184.7f };
+
+                for (int i = 0; i < xVals.Length; i++)
+                {
+                    dataPoints.Add(new PointF(xVals[i], yVals[i]));
+                    listBoxPoints.Items.Add($"({xVals[i]:F2}, {yVals[i]:F2})");
+                }
+
+                rbExponential.Checked = true;
+            };
+
+            // Основной обработчик расчета
+            btnCalculate.Click += (s, e) =>
+            {
+                if (dataPoints.Count < 2)
+                {
+                    MessageBox.Show("Добавьте хотя бы 2 точки!", "Ошибка",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                try
+                {
+                    coefficients.Clear();
+
+                    if (rbLinear.Checked)
+                    {
+                        coefficients = CalculateLinearRegression(dataPoints);
+                        currentLSFunction = $"y = {coefficients[0]:F4} + {coefficients[1]:F4}*x";
+                    }
+                    else if (rbQuadratic.Checked)
+                    {
+                        coefficients = CalculateQuadraticRegression(dataPoints);
+                        currentLSFunction = $"y = {coefficients[0]:F4} + {coefficients[1]:F4}*x + {coefficients[2]:F4}*x²";
+                    }
+                    else if (rbCubic.Checked)
+                    {
+                        coefficients = CalculateCubicRegression(dataPoints);
+                        currentLSFunction = $"y = {coefficients[0]:F4} + {coefficients[1]:F4}*x + {coefficients[2]:F4}*x² + {coefficients[3]:F4}*x³";
+                    }
+                    else if (rbExponential.Checked)
+                    {
+                        coefficients = CalculateExponentialRegression(dataPoints);
+                        currentLSFunction = $"y = {coefficients[0]:F4} * e^({coefficients[1]:F4}*x)";
+                    }
+
+                    DisplayLSResults(resultPanel, dataPoints, coefficients, currentLSFunction);
+                    graphPanel.Invalidate();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Ошибка расчета: {ex.Message}", "Ошибка",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            };
+
+            // Обработчик отрисовки графика
+            graphPanel.Paint += (sender, e) =>
+            {
+                DrawLSGraph(e.Graphics, graphPanel.ClientRectangle,
+                    dataPoints, coefficients, currentLSFunction);
+            };
+
+            // Добавляем элементы на панель
+            panel1.Controls.AddRange(new Control[]
+            {
+        groupBoxData,
+        groupBoxApprox,
+        btnCalculate, btnExample1, btnExample2, btnExample3,
+        resultPanel,
+        graphPanel
+            });
+        }
+
+        // Линейная регрессия (y = a + b*x)
+        private List<double> CalculateLinearRegression(List<PointF> points)
+        {
+            int n = points.Count;
+
+            // Суммы
+            double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+
+            foreach (var point in points)
+            {
+                double x = point.X;
+                double y = point.Y;
+
+                sumX += x;
+                sumY += y;
+                sumXY += x * y;
+                sumX2 += x * x;
+            }
+
+            // Коэффициенты
+            double b = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+            double a = (sumY - b * sumX) / n;
+
+            return new List<double> { a, b };
+        }
+
+        // Квадратичная регрессия (y = a + b*x + c*x²)
+        private List<double> CalculateQuadraticRegression(List<PointF> points)
+        {
+            int n = points.Count;
+
+            // Суммы
+            double sumX = 0, sumY = 0, sumX2 = 0, sumX3 = 0, sumX4 = 0, sumXY = 0, sumX2Y = 0;
+
+            foreach (var point in points)
+            {
+                double x = point.X;
+                double y = point.Y;
+                double x2 = x * x;
+                double x3 = x2 * x;
+                double x4 = x3 * x;
+
+                sumX += x;
+                sumY += y;
+                sumX2 += x2;
+                sumX3 += x3;
+                sumX4 += x4;
+                sumXY += x * y;
+                sumX2Y += x2 * y;
+            }
+
+            // Матрица системы уравнений
+            double[,] matrix = new double[3, 3];
+            double[] vector = new double[3];
+
+            matrix[0, 0] = n;
+            matrix[0, 1] = sumX;
+            matrix[0, 2] = sumX2;
+            matrix[1, 0] = sumX;
+            matrix[1, 1] = sumX2;
+            matrix[1, 2] = sumX3;
+            matrix[2, 0] = sumX2;
+            matrix[2, 1] = sumX3;
+            matrix[2, 2] = sumX4;
+
+            vector[0] = sumY;
+            vector[1] = sumXY;
+            vector[2] = sumX2Y;
+
+            // Решение системы методом Гаусса
+            return SolveLinearSystem(matrix, vector);
+        }
+
+        // Кубическая регрессия (y = a + b*x + c*x² + d*x³)
+        private List<double> CalculateCubicRegression(List<PointF> points)
+        {
+            int n = points.Count;
+
+            // Суммы
+            double sumX = 0, sumY = 0, sumX2 = 0, sumX3 = 0, sumX4 = 0, sumX5 = 0, sumX6 = 0;
+            double sumXY = 0, sumX2Y = 0, sumX3Y = 0;
+
+            foreach (var point in points)
+            {
+                double x = point.X;
+                double y = point.Y;
+                double x2 = x * x;
+                double x3 = x2 * x;
+                double x4 = x3 * x;
+                double x5 = x4 * x;
+                double x6 = x5 * x;
+
+                sumX += x;
+                sumY += y;
+                sumX2 += x2;
+                sumX3 += x3;
+                sumX4 += x4;
+                sumX5 += x5;
+                sumX6 += x6;
+                sumXY += x * y;
+                sumX2Y += x2 * y;
+                sumX3Y += x3 * y;
+            }
+
+            // Матрица системы уравнений
+            double[,] matrix = new double[4, 4];
+            double[] vector = new double[4];
+
+            matrix[0, 0] = n;
+            matrix[0, 1] = sumX;
+            matrix[0, 2] = sumX2;
+            matrix[0, 3] = sumX3;
+
+            matrix[1, 0] = sumX;
+            matrix[1, 1] = sumX2;
+            matrix[1, 2] = sumX3;
+            matrix[1, 3] = sumX4;
+
+            matrix[2, 0] = sumX2;
+            matrix[2, 1] = sumX3;
+            matrix[2, 2] = sumX4;
+            matrix[2, 3] = sumX5;
+
+            matrix[3, 0] = sumX3;
+            matrix[3, 1] = sumX4;
+            matrix[3, 2] = sumX5;
+            matrix[3, 3] = sumX6;
+
+            vector[0] = sumY;
+            vector[1] = sumXY;
+            vector[2] = sumX2Y;
+            vector[3] = sumX3Y;
+
+            // Решение системы методом Гаусса
+            return SolveLinearSystem(matrix, vector);
+        }
+
+        // Экспоненциальная регрессия (y = a * e^(b*x))
+        private List<double> CalculateExponentialRegression(List<PointF> points)
+        {
+            // Линеаризация: ln(y) = ln(a) + b*x
+            List<PointF> linearPoints = new List<PointF>();
+
+            foreach (var point in points)
+            {
+                if (point.Y <= 0)
+                {
+                    throw new ArgumentException("Для экспоненциальной регрессии все y должны быть > 0");
+                }
+
+                linearPoints.Add(new PointF(point.X, (float)Math.Log(point.Y)));
+            }
+
+            // Линейная регрессия для ln(y)
+            var coefficients = CalculateLinearRegression(linearPoints);
+
+            // Преобразование коэффициентов
+            double lnA = coefficients[0];
+            double b = coefficients[1];
+            double a = Math.Exp(lnA);
+
+            return new List<double> { a, b };
+        }
+
+        // Решение системы линейных уравнений методом Гаусса
+        private List<double> SolveLinearSystem(double[,] matrix, double[] vector)
+        {
+            int n = vector.Length;
+
+            // Прямой ход метода Гаусса
+            for (int i = 0; i < n; i++)
+            {
+                // Поиск максимального элемента в столбце
+                int maxRow = i;
+                double maxVal = Math.Abs(matrix[i, i]);
+
+                for (int j = i + 1; j < n; j++)
+                {
+                    if (Math.Abs(matrix[j, i]) > maxVal)
+                    {
+                        maxVal = Math.Abs(matrix[j, i]);
+                        maxRow = j;
+                    }
+                }
+
+                // Перестановка строк
+                if (maxRow != i)
+                {
+                    for (int k = i; k < n; k++)
+                    {
+                        double temp = matrix[i, k];
+                        matrix[i, k] = matrix[maxRow, k];
+                        matrix[maxRow, k] = temp;
+                    }
+
+                    double tempVec = vector[i];
+                    vector[i] = vector[maxRow];
+                    vector[maxRow] = tempVec;
+                }
+
+                // Приведение к треугольному виду
+                for (int j = i + 1; j < n; j++)
+                {
+                    double factor = matrix[j, i] / matrix[i, i];
+
+                    for (int k = i; k < n; k++)
+                    {
+                        matrix[j, k] -= factor * matrix[i, k];
+                    }
+
+                    vector[j] -= factor * vector[i];
+                }
+            }
+
+            // Обратный ход
+            List<double> solution = new List<double>(new double[n]);
+
+            for (int i = n - 1; i >= 0; i--)
+            {
+                double sum = 0;
+
+                for (int j = i + 1; j < n; j++)
+                {
+                    sum += matrix[i, j] * solution[j];
+                }
+
+                solution[i] = (vector[i] - sum) / matrix[i, i];
+            }
+
+            return solution;
+        }
+
+        // Отображение результатов МНК
+        private void DisplayLSResults(Panel panel, List<PointF> points, List<double> coefficients, string function)
+        {
+            panel.Controls.Clear();
+
+            List<string> results = new List<string>();
+            results.Add("=== РЕЗУЛЬТАТЫ АППРОКСИМАЦИИ ===");
+            results.Add($"Функция: {function}");
+            results.Add("");
+
+            // Вывод коэффициентов
+            results.Add("Коэффициенты:");
+            for (int i = 0; i < coefficients.Count; i++)
+            {
+                string coefName = i == 0 ? "a" : i == 1 ? "b" : i == 2 ? "c" : "d";
+                results.Add($"  {coefName} = {coefficients[i]:F6}");
+            }
+
+            results.Add("");
+
+            // Расчет ошибок
+            double sumSquaredErrors = 0;
+            double sumAbsoluteErrors = 0;
+            double maxError = 0;
+
+            results.Add("Ошибки для каждой точки:");
+            for (int i = 0; i < points.Count; i++)
+            {
+                double xVal = points[i].X;           // Изменили имя на xVal
+                double yVal = points[i].Y;           // Изменили имя на yVal
+                double yPredicted = CalculatePredictedY(xVal, coefficients);
+                double error = yPredicted - yVal;
+                double absError = Math.Abs(error);
+
+                sumSquaredErrors += error * error;
+                sumAbsoluteErrors += absError;
+                maxError = Math.Max(maxError, absError);
+
+                if (i < 10) // Показываем только первые 10 точек
+                {
+                    results.Add($"  Точка {i + 1}: y={yVal:F2}, ŷ={yPredicted:F2}, ошибка={error:F4}");
+                }
+            }
+
+            if (points.Count > 10)
+            {
+                results.Add($"  ... и еще {points.Count - 10} точек");
+            }
+
+            results.Add("");
+
+            // Статистика
+            double mse = sumSquaredErrors / points.Count; // Среднеквадратичная ошибка
+            double rmse = Math.Sqrt(mse);                 // Корень из MSE
+            double mae = sumAbsoluteErrors / points.Count; // Средняя абсолютная ошибка
+
+            results.Add("СТАТИСТИКА:");
+            results.Add($"  Кол-во точек: {points.Count}");
+            results.Add($"  Сумма квадратов ошибок: {sumSquaredErrors:F6}");
+            results.Add($"  Среднеквадратичная ошибка (MSE): {mse:F6}");
+            results.Add($"  Корень из MSE (RMSE): {rmse:F6}");
+            results.Add($"  Средняя абсолютная ошибка (MAE): {mae:F6}");
+            results.Add($"  Максимальная ошибка: {maxError:F6}");
+
+            // Коэффициент детерминации R²
+            if (points.Count > 1)
+            {
+                double meanY = points.Average(p => p.Y);
+                double totalSumSquares = points.Sum(p => Math.Pow(p.Y - meanY, 2));
+                double rSquared = 1 - (sumSquaredErrors / totalSumSquares);
+
+                results.Add($"  Коэффициент детерминации R²: {rSquared:F6}");
+                results.Add($"  Качество аппроксимации: {(rSquared > 0.9 ? "Отличное" : rSquared > 0.7 ? "Хорошее" : rSquared > 0.5 ? "Удовлетворительное" : "Плохое")}");
+            }
+
+            // Отображаем результаты
+            int currentY = 10;  // Изменили имя переменной на currentY
+            foreach (string line in results)
+            {
+                var label = new Label
+                {
+                    Text = line,
+                    Location = new Point(10, currentY),
+                    AutoSize = true,
+                    Font = new Font("Consolas", 8),
+                    ForeColor = Color.Black
+                };
+
+                panel.Controls.Add(label);
+                currentY += 18;  // Изменили здесь тоже
+            }
+        }
+
+        // Вычисление предсказанного значения y для заданного x
+        private double CalculatePredictedY(double x, List<double> coefficients)
+        {
+            if (coefficients == null || coefficients.Count == 0)
+                return 0;
+
+            double result = coefficients[0]; // Свободный член
+
+            for (int i = 1; i < coefficients.Count; i++)
+            {
+                result += coefficients[i] * Math.Pow(x, i);
+            }
+
+            return result;
+        }
+
+        // Отрисовка графика для МНК
+        private void DrawLSGraph(Graphics g, Rectangle drawingArea,
+            List<PointF> points, List<double> coefficients, string function)
+        {
+            g.Clear(Color.White);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+
+            if (points.Count == 0)
+            {
+                g.DrawString("Добавьте точки данных",
+                    new Font("Arial", 12), Brushes.Gray,
+                    drawingArea.Width / 2 - 100, drawingArea.Height / 2 - 10);
+                return;
+            }
+
+            // Определяем область графика
+            int padding = 50;
+            Rectangle graphArea = new Rectangle(
+                drawingArea.Left + padding,
+                drawingArea.Top + padding,
+                drawingArea.Width - 2 * padding,
+                drawingArea.Height - 2 * padding
+            );
+
+            // Находим диапазон данных
+            float minX = points.Min(p => p.X);
+            float maxX = points.Max(p => p.X);
+            float minY = points.Min(p => p.Y);
+            float maxY = points.Max(p => p.Y);
+
+            // Добавляем немного места по краям
+            float rangeX = maxX - minX;
+            float rangeY = maxY - minY;
+
+            if (rangeX < 0.1f) rangeX = 1;
+            if (rangeY < 0.1f) rangeY = 1;
+
+            minX -= rangeX * 0.1f;
+            maxX += rangeX * 0.1f;
+            minY -= rangeY * 0.1f;
+            maxY += rangeY * 0.1f;
+
+            // Масштаб
+            float scaleX = graphArea.Width / (maxX - minX);
+            float scaleY = graphArea.Height / (maxY - minY);
+
+            // Функция преобразования координат
+            PointF TransformPoint(float x, float y)
+            {
+                return new PointF(
+                    graphArea.Left + (x - minX) * scaleX,
+                    graphArea.Bottom - (y - minY) * scaleY
+                );
+            }
+
+            // Рисуем сетку
+            DrawLSGrid(g, graphArea, minX, maxX, minY, maxY, scaleX, scaleY);
+
+            // Рисуем оси
+            DrawLSAxes(g, graphArea, minX, maxX, minY, maxY, scaleX, scaleY);
+
+            // Рисуем аппроксимирующую кривую
+            if (coefficients != null && coefficients.Count > 0)
+            {
+                using (Pen curvePen = new Pen(Color.Red, 2))
+                {
+                    List<PointF> curvePoints = new List<PointF>();
+
+                    int segments = 200;
+                    for (int i = 0; i <= segments; i++)
+                    {
+                        float x = minX + (maxX - minX) * i / segments;
+                        double y = CalculatePredictedY(x, coefficients);
+
+                        // Ограничиваем слишком большие значения
+                        if (double.IsInfinity(y) || double.IsNaN(y) || Math.Abs(y) > Math.Abs(maxY) * 10)
+                            continue;
+
+                        PointF point = TransformPoint(x, (float)y);
+                        curvePoints.Add(point);
+                    }
+
+                    // Рисуем сглаженную кривую
+                    if (curvePoints.Count >= 2)
+                    {
+                        for (int i = 0; i < curvePoints.Count - 1; i++)
+                        {
+                            g.DrawLine(curvePen, curvePoints[i], curvePoints[i + 1]);
+                        }
+                    }
+                }
+            }
+
+            // Рисуем точки данных
+            foreach (var point in points)
+            {
+                PointF screenPoint = TransformPoint(point.X, point.Y);
+
+                // Рисуем точку
+                g.FillEllipse(Brushes.Blue, screenPoint.X - 4, screenPoint.Y - 4, 8, 8);
+                g.DrawEllipse(Pens.DarkBlue, screenPoint.X - 4, screenPoint.Y - 4, 8, 8);
+
+                // Рисуем вертикальную линию до кривой (ошибка)
+                if (coefficients != null && coefficients.Count > 0)
+                {
+                    double yPredicted = CalculatePredictedY(point.X, coefficients);
+                    PointF predictedPoint = TransformPoint(point.X, (float)yPredicted);
+
+                    using (Pen errorPen = new Pen(Color.FromArgb(100, Color.Red), 1))
+                    {
+                        g.DrawLine(errorPen, screenPoint, predictedPoint);
+                    }
+
+                    // Точка на кривой
+                    g.FillEllipse(Brushes.Red, predictedPoint.X - 3, predictedPoint.Y - 3, 6, 6);
+                }
+            }
+
+            // Подписи
+            DrawLSLabels(g, graphArea, drawingArea, points, function);
+        }
+
+        // Рисуем сетку для графика МНК
+        private void DrawLSGrid(Graphics g, Rectangle graphArea,
+            float minX, float maxX, float minY, float maxY,
+            float scaleX, float scaleY)
+        {
+            Pen gridPen = new Pen(Color.LightGray, 1) { DashStyle = DashStyle.Dot };
+            Font gridFont = new Font("Arial", 8);
+
+            // Вертикальные линии
+            int xDivisions = 10;
+            for (int i = 0; i <= xDivisions; i++)
+            {
+                float xValue = minX + (maxX - minX) * i / xDivisions;
+                float screenX = graphArea.Left + (xValue - minX) * scaleX;
+
+                g.DrawLine(gridPen, screenX, graphArea.Top, screenX, graphArea.Bottom);
+
+                // Подпись
+                string label = xValue.ToString("F1");
+                SizeF textSize = g.MeasureString(label, gridFont);
+                g.DrawString(label, gridFont, Brushes.Gray,
+                    screenX - textSize.Width / 2, graphArea.Bottom + 5);
+            }
+
+            // Горизонтальные линии
+            int yDivisions = 10;
+            for (int i = 0; i <= yDivisions; i++)
+            {
+                float yValue = minY + (maxY - minY) * i / yDivisions;
+                float screenY = graphArea.Bottom - (yValue - minY) * scaleY;
+
+                g.DrawLine(gridPen, graphArea.Left, screenY, graphArea.Right, screenY);
+
+                // Подпись
+                string label = yValue.ToString("F1");
+                SizeF textSize = g.MeasureString(label, gridFont);
+                g.DrawString(label, gridFont, Brushes.Gray,
+                    graphArea.Left - textSize.Width - 5, screenY - textSize.Height / 2);
+            }
+        }
+
+        // Рисуем оси для графика МНК
+        private void DrawLSAxes(Graphics g, Rectangle graphArea,
+            float minX, float maxX, float minY, float maxY,
+            float scaleX, float scaleY)
+        {
+            Pen axisPen = new Pen(Color.Black, 2);
+            Font axisFont = new Font("Arial", 9, FontStyle.Bold);
+
+            // Ось X
+            if (minY <= 0 && maxY >= 0)
+            {
+                float zeroY = graphArea.Bottom - (0 - minY) * scaleY;
+                g.DrawLine(axisPen, graphArea.Left, zeroY, graphArea.Right, zeroY);
+
+                // Стрелка
+                g.DrawLine(axisPen, graphArea.Right - 10, zeroY - 5, graphArea.Right, zeroY);
+                g.DrawLine(axisPen, graphArea.Right - 10, zeroY + 5, graphArea.Right, zeroY);
+
+                // Подпись
+                g.DrawString("X", axisFont, Brushes.Black, graphArea.Right - 15, zeroY - 20);
+            }
+
+            // Ось Y
+            if (minX <= 0 && maxX >= 0)
+            {
+                float zeroX = graphArea.Left + (0 - minX) * scaleX;
+                g.DrawLine(axisPen, zeroX, graphArea.Top, zeroX, graphArea.Bottom);
+
+                // Стрелка
+                g.DrawLine(axisPen, zeroX - 5, graphArea.Top + 10, zeroX, graphArea.Top);
+                g.DrawLine(axisPen, zeroX + 5, graphArea.Top + 10, zeroX, graphArea.Top);
+
+                // Подпись
+                g.DrawString("Y", axisFont, Brushes.Black, zeroX + 10, graphArea.Top);
+            }
+        }
+
+        // Подписи для графика МНК
+        private void DrawLSLabels(Graphics g, Rectangle graphArea, Rectangle drawingArea,
+            List<PointF> points, string function)
+        {
+            Font titleFont = new Font("Arial", 11, FontStyle.Bold);
+            Font infoFont = new Font("Arial", 9);
+
+            // Заголовок
+            string title = "МЕТОД НАИМЕНЬШИХ КВАДРАТОВ";
+            g.DrawString(title, titleFont, Brushes.DarkBlue,
+                drawingArea.Left + 10, drawingArea.Top + 5);
+
+            // Функция
+            if (!string.IsNullOrEmpty(function))
+            {
+                g.DrawString($"Функция: {function}", infoFont, Brushes.DarkRed,
+                    drawingArea.Left + 10, drawingArea.Top + 30);
+            }
+
+            // Информация о данных
+            if (points.Count > 0)
+            {
+                string dataInfo = $"Точек: {points.Count}, X: [{points.Min(p => p.X):F2}, {points.Max(p => p.X):F2}], Y: [{points.Min(p => p.Y):F2}, {points.Max(p => p.Y):F2}]";
+                g.DrawString(dataInfo, infoFont, Brushes.DarkGreen,
+                    drawingArea.Left + 10, drawingArea.Top + 50);
+            }
+
+            // Легенда
+            string legend = "Легенда: ● - данные, — - аппроксимация, | - ошибка";
+            g.DrawString(legend, new Font("Arial", 8), Brushes.DarkGray,
+                graphArea.Left, graphArea.Bottom + 5);
+        }
+
+        private void Form1_Load(object sender, EventArgs e)
+        {
+
         }
     }
 
