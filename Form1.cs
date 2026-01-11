@@ -30,6 +30,11 @@ namespace Programma_2kyrs
         private double lastMax = 0;
         private double lastZero = 0;
         private Panel graficPanel;
+        // Интегралы
+        private string lastIntegrationFunction = "";
+        private double lastIntegrationA = 0;
+        private double lastIntegrationB = 0;
+        private string selectedIntegrationMethod = "Все методы";
 
         public Form1()
         {
@@ -82,8 +87,14 @@ namespace Programma_2kyrs
                 case 4: // Интеграллы
                     InitializeDifiniteIntegralControls();
                     break;
+                case 5: // СЛАУ
+                    InitializeSLAU();
+                    break;
                 case 6: // Метод покоординатного спуска
                     InitializeCoordinateDescentControls();
+                    break;
+                case 7: // Метод Наименьших квадратов
+                    InitializeLeastSquares();
                     break;
             }
         }
@@ -92,6 +103,15 @@ namespace Programma_2kyrs
         private void panel1_Paint_1(object sender, PaintEventArgs e)
         {
 
+        }
+
+        private void ResetAllPoints()
+        {
+            lastRoot = 0;
+            lastMin = 0;
+            lastMax = 0;
+            lastZero = 0;
+            newtonIterationPoints?.Clear();
         }
 
         //*******************************************************************************************| МЕТОД ДИХОТОМИИ |************************************************************************************//
@@ -227,43 +247,55 @@ namespace Programma_2kyrs
             }
         }
 
-        // ОТРИСОВКА СЕТКИ
+        // ОТРИСОВКА СЕТКИ - исправленная версия
         private void DrawGrid(Graphics g, Rectangle graphArea)
         {
             Pen gridPen = new Pen(Color.LightGray, 1) { DashStyle = DashStyle.Dot };
 
-            // Вертикальные
-            for (int x = graphArea.Left; x <= graphArea.Right; x += 20)
-            {
-                g.DrawLine(gridPen, x, graphArea.Top, x, graphArea.Bottom);
-            }
-
-            // Горизонтальные
-            for (int y = graphArea.Top; y <= graphArea.Bottom; y += 20)
-            {
-                g.DrawLine(gridPen, graphArea.Left, y, graphArea.Right, y);
-            }
-        }
-
-        // ОТРИСОВКА ОСЕЙ КООРДИНАТ
-        private void DrawAxes(Graphics g, Rectangle graphArea)
-        {
-            Pen axisPen = new Pen(Color.Black, 2);
-
-            // точка (0,0)
+            // Центр координат
             PointF center = new PointF(
                 graphArea.Left + graphArea.Width / 2,
                 graphArea.Top + graphArea.Height / 2
             );
 
-            // Ось X
+            // Вертикальные линии сетки (не поверх осей)
+            for (int i = -10; i <= 10; i++)
+            {
+                if (i == 0) continue; // Пропускаем ось Y
+
+                float x = center.X + i * (graphArea.Width / 20f);
+                g.DrawLine(gridPen, x, graphArea.Top, x, graphArea.Bottom);
+            }
+
+            // Горизонтальные линии сетки (не поверх осей)
+            for (int i = -10; i <= 10; i++)
+            {
+                if (i == 0) continue; // Пропускаем ось X
+
+                float y = center.Y - i * (graphArea.Height / 20f);
+                g.DrawLine(gridPen, graphArea.Left, y, graphArea.Right, y);
+            }
+        }
+
+        // ОТРИСОВКА ОСЕЙ КООРДИНАТ - исправленная версия
+        private void DrawAxes(Graphics g, Rectangle graphArea)
+        {
+            Pen axisPen = new Pen(Color.Black, 2);
+
+            // Центр координат
+            PointF center = new PointF(
+                graphArea.Left + graphArea.Width / 2,
+                graphArea.Top + graphArea.Height / 2
+            );
+
+            // Ось X (горизонтальная)
             g.DrawLine(axisPen, graphArea.Left, center.Y, graphArea.Right, center.Y);
 
             // Стрелка оси X
             g.DrawLine(axisPen, graphArea.Right - 10, center.Y - 5, graphArea.Right, center.Y);
             g.DrawLine(axisPen, graphArea.Right - 10, center.Y + 5, graphArea.Right, center.Y);
 
-            // Ось Y
+            // Ось Y (вертикальная)
             g.DrawLine(axisPen, center.X, graphArea.Top, center.X, graphArea.Bottom);
 
             // Стрелка оси Y
@@ -271,13 +303,13 @@ namespace Programma_2kyrs
             g.DrawLine(axisPen, center.X + 5, graphArea.Top + 10, center.X, graphArea.Top);
         }
 
-        // ОТРИСОВКА ГРАФИКА ФУНКЦИИ
+        // ОТРИСОВКА ГРАФИКА ФУНКЦИИ - с обработкой разрывов
         private void DrawFunction(Graphics g, Rectangle graphArea, string functionStr)
         {
             try
             {
                 // Масштаб: определяем диапазон отображения
-                float scaleX = graphArea.Width / 20f; // Отображаем от -10 до 10 по X (20 единиц)
+                float scaleX = graphArea.Width / 20f; // Отображаем от -10 до 10 по X
                 float scaleY = graphArea.Height / 20f; // Отображаем от -10 до 10 по Y
 
                 // Центр координат
@@ -287,70 +319,117 @@ namespace Programma_2kyrs
                 );
 
                 using (Pen graphPen = new Pen(Color.Blue, 2))
-                using (GraphicsPath path = new GraphicsPath())
                 {
-                    List<PointF> points = new List<PointF>();
-                    bool firstValidPoint = true;
-                    PointF lastPoint = PointF.Empty;
+                    List<PointF> segmentPoints = new List<PointF>();
+                    bool lastPointValid = false;
 
-                    // Количество точек для построения
-                    int pointCount = graphArea.Width; // По одной точке на пиксель по ширине
-                    double xStep = 20.0 / pointCount; // Шаг по X
+                    // Увеличиваем количество точек для лучшего качества
+                    int pointCount = graphArea.Width * 2;
+                    double xStep = 20.0 / pointCount;
 
                     for (int i = 0; i <= pointCount; i++)
                     {
                         double worldX = -10 + i * xStep;
 
+                        // Особая обработка для функций с разрывами (1/x)
+                        if (functionStr.Contains("1/x") || functionStr.Contains("1/(x)"))
+                        {
+                            // Исключаем окрестность точки разрыва
+                            if (Math.Abs(worldX) < 0.1) // Пропускаем x близкие к 0
+                            {
+                                lastPointValid = false;
+                                continue;
+                            }
+                        }
+
                         try
                         {
                             double worldY = EvaluateMathExpression(functionStr, worldX);
+
+                            // Ограничиваем слишком большие значения (для 1/x)
+                            if (Math.Abs(worldY) > 100)
+                            {
+                                worldY = double.IsPositiveInfinity(worldY) ? 100 :
+                                         double.IsNegativeInfinity(worldY) ? -100 :
+                                         Math.Sign(worldY) * 100;
+                            }
 
                             // Преобразуем мировые координаты в экранные
                             float screenX = center.X + (float)(worldX * scaleX);
                             float screenY = center.Y - (float)(worldY * scaleY);
 
-                            // Проверяем, не выходит ли точка за пределы области
-                            if (screenY >= graphArea.Top - 100 && screenY <= graphArea.Bottom + 100)
+                            // Проверяем, находится ли точка в видимой области
+                            if (screenY >= graphArea.Top - 500 && screenY <= graphArea.Bottom + 500)
                             {
-                                PointF currentPoint = new PointF(screenX, screenY);
+                                if (lastPointValid && segmentPoints.Count > 0)
+                                {
+                                    // Проверяем разрыв (резкий скачок)
+                                    PointF lastPoint = segmentPoints.Last();
+                                    float deltaY = Math.Abs(screenY - lastPoint.Y);
 
-                                if (firstValidPoint)
-                                {
-                                    firstValidPoint = false;
-                                    lastPoint = currentPoint;
-                                }
-                                else
-                                {
-                                    // Проверяем разрыв функции
-                                    if (Math.Abs(currentPoint.Y - lastPoint.Y) < graphArea.Height * 2)
+                                    if (deltaY < graphArea.Height * 0.8) // Разумный порог для разрыва
                                     {
-                                        path.AddLine(lastPoint, currentPoint);
+                                        segmentPoints.Add(new PointF(screenX, screenY));
                                     }
                                     else
                                     {
-                                        // Если разрыв большой, начинаем новый сегмент
-                                        firstValidPoint = true;
+                                        // Рисуем текущий сегмент и начинаем новый
+                                        if (segmentPoints.Count >= 2)
+                                        {
+                                            g.DrawLines(graphPen, segmentPoints.ToArray());
+                                        }
+                                        segmentPoints.Clear();
+                                        segmentPoints.Add(new PointF(screenX, screenY));
                                     }
                                 }
-                                lastPoint = currentPoint;
+                                else
+                                {
+                                    segmentPoints.Add(new PointF(screenX, screenY));
+                                    lastPointValid = true;
+                                }
                             }
+                            else
+                            {
+                                lastPointValid = false;
+                                // Рисуем накопленный сегмент
+                                if (segmentPoints.Count >= 2)
+                                {
+                                    g.DrawLines(graphPen, segmentPoints.ToArray());
+                                }
+                                segmentPoints.Clear();
+                            }
+                        }
+                        catch (DivideByZeroException)
+                        {
+                            // Разрыв функции - начинаем новый сегмент
+                            lastPointValid = false;
+                            if (segmentPoints.Count >= 2)
+                            {
+                                g.DrawLines(graphPen, segmentPoints.ToArray());
+                            }
+                            segmentPoints.Clear();
                         }
                         catch
                         {
-                            // Точка не определена, начинаем новый сегмент
-                            firstValidPoint = true;
+                            lastPointValid = false;
                         }
                     }
 
-                    // Рисуем график
-                    g.DrawPath(graphPen, path);
-
-                    // Если был найден корень, отмечаем его
-                    if (lastRoot != 0)
+                    // Рисуем последний сегмент
+                    if (segmentPoints.Count >= 2)
                     {
-                        float rootX = center.X + (float)(lastRoot * scaleX);
-                        float rootY = center.Y;
+                        g.DrawLines(graphPen, segmentPoints.ToArray());
+                    }
+                }
 
+                // Отмечаем корень, если он найден
+                if (lastRoot != 0)
+                {
+                    float rootX = center.X + (float)(lastRoot * scaleX);
+                    float rootY = center.Y;
+
+                    if (rootX >= graphArea.Left && rootX <= graphArea.Right)
+                    {
                         // Рисуем точку корня
                         g.FillEllipse(Brushes.Red, rootX - 4, rootY - 4, 8, 8);
                         g.DrawEllipse(Pens.DarkRed, rootX - 4, rootY - 4, 8, 8);
@@ -365,57 +444,76 @@ namespace Programma_2kyrs
             }
             catch (Exception ex)
             {
-                throw new Exception($"Ошибка построения графика: {ex.Message}");
+                g.DrawString($"Ошибка построения: {ex.Message}",
+                    new Font("Arial", 10), Brushes.Red, 10, 10);
             }
         }
 
-        // ОТРИСОВКА ПОДПИСЕЙ ОСЕЙ И ДЕЛЕНИЙ
+        // ОТРИСОВКА ПОДПИСЕЙ ОСЕЙ И ДЕЛЕНИЙ - исправленная версия
         private void DrawLabels(Graphics g, Rectangle graphArea, Rectangle drawingArea)
         {
             Font labelFont = new Font("Arial", 9);
             Brush labelBrush = Brushes.Black;
 
-            // Центр 
+            // Центр координат
             PointF center = new PointF(
                 graphArea.Left + graphArea.Width / 2,
                 graphArea.Top + graphArea.Height / 2
             );
 
-            // Подпись оси X
+            // Подпись оси X (рисуем ПЕРЕД делениями)
             g.DrawString("X", new Font("Arial", 10, FontStyle.Bold), Brushes.Black,
-                drawingArea.Right - 20, center.Y + 5);
+                graphArea.Right - 15, center.Y + 10);
 
-            // Подпись оси Y
+            // Подпись оси Y (рисуем ПЕРЕД делениями)
             g.DrawString("Y", new Font("Arial", 10, FontStyle.Bold), Brushes.Black,
-                center.X - 20, drawingArea.Top + 5);
+                center.X + 10, graphArea.Top);
 
-            // Подписи делений на оси X
+            // Подписи делений на оси X (рисуем ПОСЛЕ осей)
             for (int i = -10; i <= 10; i += 2)
             {
-                if (i == 0) continue; // Пропускаем 0, чтобы не накладывалось на ось 
+                if (i == 0) continue;
 
                 float x = center.X + i * (graphArea.Width / 20f);
+
+                // Рисуем метку деления (короткая черточка)
                 g.DrawLine(Pens.Black, x, center.Y - 3, x, center.Y + 3);
-                g.DrawString(i.ToString(), labelFont, labelBrush, x - 10, center.Y + 5);
+
+                // Подписываем значение
+                string label = i.ToString();
+                SizeF textSize = g.MeasureString(label, labelFont);
+                g.DrawString(label, labelFont, labelBrush,
+                    x - textSize.Width / 2, center.Y + 5);
             }
 
-            // Подписи делений на оси Y
+            // Подписи делений на оси Y (рисуем ПОСЛЕ осей)
             for (int i = -10; i <= 10; i += 2)
             {
-                if (i == 0) continue; // Пропускаем 0, чтобы не накладывалось на ось X
+                if (i == 0) continue;
 
                 float y = center.Y - i * (graphArea.Height / 20f);
+
+                // Рисуем метку деления
                 g.DrawLine(Pens.Black, center.X - 3, y, center.X + 3, y);
-                g.DrawString(i.ToString(), labelFont, labelBrush, center.X - 25, y - 7);
+
+                // Подписываем значение
+                string label = i.ToString();
+                SizeF textSize = g.MeasureString(label, labelFont);
+                g.DrawString(label, labelFont, labelBrush,
+                    center.X - textSize.Width - 5, y - textSize.Height / 2);
             }
 
-            // Начало координат
-            g.DrawString("0", labelFont, labelBrush, center.X + 3, center.Y + 3);
+            // Начало координат (0) - рисуем отдельно
+            string zeroLabel = "0";
+            SizeF zeroSize = g.MeasureString(zeroLabel, labelFont);
+            g.DrawString(zeroLabel, labelFont, labelBrush,
+                center.X + 3, center.Y + 3);
 
-            // Подпись функции
+            // Подпись функции в углу
             if (!string.IsNullOrEmpty(currentFunction))
             {
-                g.DrawString($"f(x) = {currentFunction}",
+                string functionLabel = $"f(x) = {currentFunction}";
+                g.DrawString(functionLabel,
                     new Font("Arial", 10, FontStyle.Bold), Brushes.DarkBlue,
                     graphArea.Left, drawingArea.Top + 5);
             }
@@ -424,7 +522,8 @@ namespace Programma_2kyrs
         // РАСЧЕТЫ МЕТОДА ДИХОТОМИИ
         private void CalculateDichotomy(string functionStr, string aStr, string bStr, string epsilonStr, Label resultLabel)
         {
-            double accuracy = 1;
+            ResetAllPoints(); 
+            double accuracy = 1;            
 
             try
             {
@@ -492,23 +591,27 @@ namespace Programma_2kyrs
         {
             try
             {
-                // Создаем парсер
-                var parser = new MathParser();
+                // Обработка деления на ноль для 1/x
+                if ((expression.Contains("1/x") || expression.Contains("1/(x)")) && Math.Abs(x) < 1e-10)
+                {
+                    throw new DivideByZeroException("Деление на ноль");
+                }
 
-                // Добавляем переменные
+                var parser = new MathParser();
                 parser.LocalVariables["x"] = x;
                 parser.LocalVariables["pi"] = Math.PI;
                 parser.LocalVariables["e"] = Math.E;
 
-                // Предварительная обработка выражения
                 expression = PreprocessExpression(expression);
-
-                // Парсим и вычисляем выражение
                 return parser.Parse(expression);
+            }
+            catch (DivideByZeroException)
+            {
+                throw; // Пробрасываем специальное исключение для разрывов
             }
             catch (Exception ex)
             {
-                throw new ArgumentException($"Ошибка вычисления выражения '{expression}': {ex.Message}");
+                throw new ArgumentException($"Ошибка вычисления '{expression}': {ex.Message}");
             }
         }
 
@@ -631,14 +734,6 @@ namespace Programma_2kyrs
                 Width = 120
             };
 
-            var btnFindZero = new System.Windows.Forms.Button
-            {
-                Text = "Найти ноль (f(x)=0)",
-                Location = new Point(10, 190),
-                BackColor = Color.LightGreen,
-                Width = 120
-            };
-
             // Поле для результатов
             var resultLabel = new Label
             {
@@ -715,13 +810,6 @@ namespace Programma_2kyrs
                 textBoxEpsilon.Text,
                 resultLabel);
 
-            btnFindZero.Click += (s, e) => FindZero(
-                textBoxFunction.Text,
-                textBoxA.Text,
-                textBoxB.Text,
-                textBoxEpsilon.Text,
-                resultLabel);
-
             // Добавление элементов на панель
             panel1.Controls.AddRange(new Control[]
             {
@@ -729,7 +817,7 @@ namespace Programma_2kyrs
         labelA, textBoxA,
         labelB, textBoxB,
         labelEpsilon, textBoxEpsilon,
-        btnFindMin, btnFindMax, btnFindZero,
+        btnFindMin, btnFindMax,
         resultLabel, labelGraphic, graficPanel, drawButton, btnFindAll
             });
         }
@@ -1266,7 +1354,7 @@ namespace Programma_2kyrs
 
             var calculateButton = new System.Windows.Forms.Button
             {
-                Text = "Вычислить корень",
+                Text = "Вычислить Минимум",
                 Location = new Point(10, 160),
                 BackColor = Color.LightBlue,
                 Width = 140
@@ -1439,8 +1527,19 @@ namespace Programma_2kyrs
             return $"(f(x+0.001)-f(x))/0.001";
         }
 
-        // МЕТОД НЬЮТОНА ДЛЯ НАХОЖДЕНИЯ КОРНЯ
-        private void CalculateNewtonMethod(string functionStr, string derivativeStr, string x0Str, string epsilonStr, string maxIterStr, Label resultLabel, DataGridView dataGridView)
+        // Метод для вычисления второй производной (нужен для определения типа точки)
+        private string CalculateSecondDerivative(string function)
+        {
+            // Сначала получаем первую производную
+            string firstDeriv = CalculateDerivative(function);
+
+            // Потом дифференцируем ее еще раз
+            return CalculateDerivative(firstDeriv);
+        }
+
+        // МЕТОД НЬЮТОНА ДЛЯ НАХОЖДЕНИЯ МИНИМУМА (не корня!)
+        private void CalculateNewtonMethod(string functionStr, string derivativeStr, string x0Str,
+            string epsilonStr, string maxIterStr, Label resultLabel, DataGridView dataGridView)
         {
             double accuracy = 1;
 
@@ -1466,7 +1565,8 @@ namespace Programma_2kyrs
 
                 double xn = x0;
                 double fxn = EvaluateMathExpression(functionStr, xn);
-                double fpxn = 0;
+                double fpxn = 0; // первая производная
+                double fppxn = 0; // вторая производная (новая переменная)
                 double delta = 0;
                 int iteration = 0;
                 bool converged = false;
@@ -1476,15 +1576,16 @@ namespace Programma_2kyrs
 
                 // Сохраняем для отрисовки
                 currentFunction = functionStr;
-                lastRoot = 0;
+                lastRoot = 0; // будем использовать как найденный минимум
+                lastMin = 0; // тоже будем использовать
 
-                // Основной цикл метода Ньютона
+                // Основной цикл метода Ньютона для минимума
                 while (iteration < maxIterations)
                 {
                     // Вычисляем значение функции
                     fxn = EvaluateMathExpression(functionStr, xn);
 
-                    // Вычисляем производную
+                    // Вычисляем первую производную
                     if (derivativeStr.Contains("f(x+") && derivativeStr.Contains("f(x)"))
                     {
                         // Используем приближенную производную
@@ -1498,17 +1599,40 @@ namespace Programma_2kyrs
                         fpxn = EvaluateMathExpression(derivativeStr, xn);
                     }
 
-                    // Проверка на нулевую производную
-                    if (Math.Abs(fpxn) < accuracy)
+                    // Вычисляем вторую производную (нужна для минимума)
+                    // Используем численное дифференцирование первой производной
+                    double h2 = 0.0001;
+                    double fpxh = 0;
+
+                    if (derivativeStr.Contains("f(x+") && derivativeStr.Contains("f(x)"))
                     {
-                        resultLabel.Text = $"Ошибка: Производная близка к нулю!\n" +
-                                          $"f'({xn:F6}) = {fpxn:E}\n" +
+                        // Если производная задана численно
+                        double fxh1 = EvaluateMathExpression(functionStr, xn + h2);
+                        double fxh2 = EvaluateMathExpression(functionStr, xn - h2);
+                        fpxh = (fxh1 - fxh2) / (2 * h2);
+                    }
+                    else
+                    {
+                        // Вычисляем производную в соседних точках
+                        double fpx_plus = EvaluateMathExpression(derivativeStr, xn + h2);
+                        double fpx_minus = EvaluateMathExpression(derivativeStr, xn - h2);
+                        fpxh = (fpx_plus - fpx_minus) / (2 * h2);
+                    }
+
+                    fppxn = fpxh; // это вторая производная
+
+                    // Проверка на нулевую вторую производную
+                    if (Math.Abs(fppxn) < accuracy)
+                    {
+                        resultLabel.Text = $"Ошибка: Вторая производная близка к нулю!\n" +
+                                          $"f''({xn:F6}) = {fppxn:E}\n" +
                                           $"Итерация: {iteration}";
                         return;
                     }
 
-                    // Формула метода Ньютона: x_{n+1} = x_n - f(x_n)/f'(x_n)
-                    double xn1 = xn - fxn / fpxn;
+                    // ФОРМУЛА МЕТОДА НЬЮТОНА ДЛЯ МИНИМУМА: x_{n+1} = x_n - f'(x_n)/f''(x_n)
+                    // (а не x_{n+1} = x_n - f(x_n)/f'(x_n) как для корня)
+                    double xn1 = xn - fpxn / fppxn;
                     delta = Math.Abs(xn1 - xn);
 
                     // Добавляем строку в таблицу
@@ -1521,12 +1645,13 @@ namespace Programma_2kyrs
                     // Сохраняем точку для отрисовки
                     iterationPoints.Add(xn1);
 
-                    // Проверка условия остановки
-                    if (Math.Abs(fxn) < accuracy || delta < accuracy)
+                    // Проверка условия остановки для минимума: f'(x) близко к 0
+                    if (Math.Abs(fpxn) < accuracy || delta < accuracy)
                     {
                         converged = true;
                         xn = xn1;
-                        lastRoot = xn;
+                        lastRoot = xn; // сохраняем найденную точку
+                        lastMin = xn;  // тоже сохраняем как минимум
                         break;
                     }
 
@@ -1534,23 +1659,71 @@ namespace Programma_2kyrs
                     iteration++;
                 }
 
+                // Пересчитываем значения в найденной точке
+                fxn = EvaluateMathExpression(functionStr, xn);
+                fpxn = EvaluateMathExpression(derivativeStr, xn);
+
+                // Вычисляем вторую производную для проверки типа точки
+                double finalFppxn = 0;
+                try
+                {
+                    // Пытаемся вычислить аналитически
+                    string secondDerivative = CalculateSecondDerivative(functionStr);
+                    finalFppxn = EvaluateMathExpression(secondDerivative, xn);
+                }
+                catch
+                {
+                    // Используем численное дифференцирование
+                    double h = 0.0001;
+                    double fpx_plus = EvaluateMathExpression(derivativeStr, xn + h);
+                    double fpx_minus = EvaluateMathExpression(derivativeStr, xn - h);
+                    finalFppxn = (fpx_plus - fpx_minus) / (2 * h);
+                }
+
                 // Формируем результат
                 if (converged)
                 {
-                    fxn = EvaluateMathExpression(functionStr, xn);
-                    resultLabel.Text = $"Корень найден:\n" +
-                                      $"x = {xn:F8}\n" +
-                                      $"f(x) = {fxn:E}\n" +
-                                      $"Итераций: {iteration + 1}\n" +
-                                      $"Точность: {epsilon}";
+                    // Проверяем тип точки
+                    if (finalFppxn > 0)
+                    {
+                        resultLabel.Text = $"МИНИМУМ найден:\n" +
+                                          $"x = {xn:F8}\n" +
+                                          $"f(x) = {fxn:F8}\n" +
+                                          $"f'(x) = {fpxn:E} (≈0)\n" +
+                                          $"f''(x) = {finalFppxn:F6} (>0 - минимум)\n" +
+                                          $"Итераций: {iteration + 1}\n" +
+                                          $"Точность: {epsilon}";
+                    }
+                    else if (finalFppxn < 0)
+                    {
+                        resultLabel.Text = $"МАКСИМУМ найден:\n" +
+                                          $"x = {xn:F8}\n" +
+                                          $"f(x) = {fxn:F8}\n" +
+                                          $"f'(x) = {fpxn:E} (≈0)\n" +
+                                          $"f''(x) = {finalFppxn:F6} (<0 - максимум)\n" +
+                                          $"Итераций: {iteration + 1}\n" +
+                                          $"Точность: {epsilon}";
+                    }
+                    else
+                    {
+                        resultLabel.Text = $"СТАЦИОНАРНАЯ ТОЧКА:\n" +
+                                          $"x = {xn:F8}\n" +
+                                          $"f(x) = {fxn:F8}\n" +
+                                          $"f'(x) = {fpxn:E} (≈0)\n" +
+                                          $"f''(x) = {finalFppxn:F6} (неопределено)\n" +
+                                          $"Итераций: {iteration + 1}\n" +
+                                          $"Точность: {epsilon}";
+                    }
 
                     lastRoot = xn;
+                    lastMin = xn;
                 }
                 else
                 {
                     resultLabel.Text = $"Метод не сошелся за {maxIterations} итераций!\n" +
                                       $"Последнее приближение: {xn:F8}\n" +
                                       $"f(x) = {fxn:E}\n" +
+                                      $"f'(x) = {fpxn:E}\n" +
                                       $"Последнее Δx: {delta:E}";
                 }
 
@@ -1655,7 +1828,7 @@ namespace Programma_2kyrs
             catch { }
         }
 
-        // ОТРИСОВКА КАСАТЕЛЬНЫХ ДЛЯ ИТЕРАЦИЙ МЕТОДА НЬЮТОНА
+        // ОТРИСОВКА КАСАТЕЛЬНЫХ ДЛЯ ИТЕРАЦИЙ МЕТОДА НЬЮТОНА (для минимума)
         private void DrawNewtonTangents(Graphics g, Rectangle graphArea, string functionStr, string derivativeStr)
         {
             if (newtonIterationPoints == null || newtonIterationPoints.Count == 0)
@@ -1693,7 +1866,6 @@ namespace Programma_2kyrs
                     }
 
                     // Уравнение касательной: y = y0 + derivative*(x - x0)
-                    // Вычисляем две точки для отрисовки линии
                     double x1 = x0 - 2;
                     double x2 = x0 + 2;
 
@@ -1724,39 +1896,77 @@ namespace Programma_2kyrs
                     g.DrawString($"x{i}", new Font("Arial", 8, FontStyle.Bold),
                         Brushes.DarkRed, pointX + 5, pointY - 10);
 
-                    // Рисуем вертикальную линию к оси X для следующего приближения
+                    // Рисуем направление движения к минимуму
                     if (i < newtonIterationPoints.Count - 1)
                     {
                         double nextX = newtonIterationPoints[i + 1];
                         float nextScreenX = center.X + (float)(nextX * scaleX);
+                        float nextPointY = center.Y - (float)(EvaluateMathExpression(functionStr, nextX) * scaleY);
 
                         using (Pen guidePen = new Pen(Color.Gray, 1f))
                         {
                             guidePen.DashStyle = DashStyle.Dot;
-                            g.DrawLine(guidePen, pointX, pointY, nextScreenX, pointY);
-                            g.DrawLine(guidePen, nextScreenX, pointY, nextScreenX, center.Y);
+                            g.DrawLine(guidePen, pointX, pointY, nextScreenX, nextPointY);
                         }
                     }
                 }
                 catch { }
             }
 
-            // Рисуем последний найденный корень
+            // Рисуем найденную точку минимума/максимума
             if (lastRoot != 0)
             {
-                float rootX = center.X + (float)(lastRoot * scaleX);
+                try
+                {
+                    float pointX = center.X + (float)(lastRoot * scaleX);
+                    float pointY = center.Y - (float)(EvaluateMathExpression(currentFunction, lastRoot) * scaleY);
 
-                // Зеленый кружок на оси X
-                g.FillEllipse(Brushes.Green, rootX - 5, center.Y - 5, 10, 10);
-                g.DrawEllipse(Pens.DarkGreen, rootX - 5, center.Y - 5, 10, 10);
+                    // Определяем цвет в зависимости от типа точки
+                    Brush pointBrush = Brushes.Green; // по умолчанию зеленый
+                    Pen pointPen = Pens.DarkGreen;
+                    string pointLabel = "Минимум";
 
-                g.DrawString($"Корень: {lastRoot:F4}",
-                    new Font("Arial", 9, FontStyle.Bold), Brushes.DarkGreen,
-                    rootX + 5, center.Y - 15);
+                    // Проверяем вторую производную
+                    try
+                    {
+                        string secondDeriv = CalculateSecondDerivative(currentFunction);
+                        double fpp = EvaluateMathExpression(secondDeriv, lastRoot);
+
+                        if (fpp < 0)
+                        {
+                            pointBrush = Brushes.Red;
+                            pointPen = Pens.DarkRed;
+                            pointLabel = "Максимум";
+                        }
+                        else if (Math.Abs(fpp) < 0.001)
+                        {
+                            pointBrush = Brushes.Orange;
+                            pointPen = Pens.DarkOrange;
+                            pointLabel = "Стац. точка";
+                        }
+                    }
+                    catch { }
+
+                    // Рисуем точку
+                    g.FillEllipse(pointBrush, pointX - 5, pointY - 5, 10, 10);
+                    g.DrawEllipse(pointPen, pointX - 5, pointY - 5, 10, 10);
+
+                    // Подписываем
+                    g.DrawString($"{pointLabel}: {lastRoot:F4}",
+                        new Font("Arial", 9, FontStyle.Bold), Brushes.DarkGreen,
+                        pointX + 5, pointY - 15);
+
+                    // Рисуем горизонтальную линию через точку (касательная в стационарной точке)
+                    using (Pen stationPen = new Pen(Color.Gray, 1f) { DashStyle = DashStyle.Dash })
+                    {
+                        g.DrawLine(stationPen, graphArea.Left, pointY, graphArea.Right, pointY);
+                    }
+                }
+                catch { }
             }
         }
 
-        // ПОДПИСИ ДЛЯ ГРАФИКА МЕТОДА НЬЮТОНА
+        // ПОДПИСИ ДЛЯ ГРАФИКА МЕТОДА НЬЮТОНА (для минимума)
         private void DrawNewtonLabels(Graphics g, Rectangle graphArea, Rectangle drawingArea, string functionStr)
         {
             Font labelFont = new Font("Arial", 9);
@@ -1774,14 +1984,14 @@ namespace Programma_2kyrs
             // Заголовок
             if (!string.IsNullOrEmpty(functionStr))
             {
-                string title = $"Метод Ньютона: f(x) = {functionStr}";
+                string title = $"Метод Ньютона для минимума: f(x) = {functionStr}"; // ИЗМЕНИЛИ
                 SizeF titleSize = g.MeasureString(title, titleFont);
                 g.DrawString(title, titleFont, Brushes.DarkBlue,
                     drawingArea.Left + 10, drawingArea.Top + 10);
             }
 
             // Легенда
-            string legend = "Обозначения:  ● - итерации  --- - касательные  ● - найденный корень";
+            string legend = "Обозначения:  ● - итерации  --- - касательные  ● - найденный минимум/максимум"; // ИЗМЕНИЛИ
             g.DrawString(legend, new Font("Arial", 8), Brushes.DarkGray,
                 graphArea.Left, graphArea.Bottom + 5);
         }
@@ -2803,6 +3013,31 @@ namespace Programma_2kyrs
             // Обработчики событий
             btnCalculate.Click += (s, e) =>
             {
+                // Сохраняем параметры для отрисовки
+                lastIntegrationFunction = textBoxFunction.Text;
+                lastIntegrationA = double.Parse(textBoxA.Text);
+                lastIntegrationB = double.Parse(textBoxB.Text);
+
+                // Определяем выбранный метод
+                if (chkRectangles.Checked)
+                {
+                    if (rbLeftRect.Checked) selectedIntegrationMethod = "Левые прямоугольники";
+                    else if (rbRightRect.Checked) selectedIntegrationMethod = "Правые прямоугольники";
+                    else if (rbMiddleRect.Checked) selectedIntegrationMethod = "Средние прямоугольники";
+                }
+                else if (chkTrapezoidal.Checked)
+                {
+                    selectedIntegrationMethod = "Трапеции";
+                }
+                else if (chkSimpson.Checked)
+                {
+                    selectedIntegrationMethod = "Симпсон";
+                }
+                else
+                {
+                    selectedIntegrationMethod = "Все методы";
+                }
+
                 CalculateIntegral(
                     textBoxFunction.Text,
                     textBoxA.Text,
@@ -2818,6 +3053,9 @@ namespace Programma_2kyrs
                     resultPanel,
                     textBoxExact.Text
                 );
+
+                // Обновляем график
+                graphPanel.Invalidate();
             };
 
             btnAllMethods.Click += (s, e) =>
@@ -3315,7 +3553,7 @@ namespace Programma_2kyrs
             panel.Controls.Add(bestLabel);
         }
 
-        // ПОСТРОЕНИЕ ГРАФИКА ИНТЕГРАЛА
+        // ПОСТРОЕНИЕ ГРАФИКА ИНТЕГРАЛА (обновленный)
         private void DrawIntegralGraph(Panel panel, string functionStr, string aStr, string bStr)
         {
             try
@@ -3323,6 +3561,14 @@ namespace Programma_2kyrs
                 double a = double.Parse(aStr);
                 double b = double.Parse(bStr);
 
+                if (a >= b)
+                {
+                    a = 0;
+                    b = 2;
+                }
+
+                // Создаем новую лямбду для отрисовки, чтобы избежать накопления обработчиков
+                panel.Paint -= (sender, e) => { };
                 panel.Paint += (sender, e) =>
                 {
                     DrawIntegralFunction(e.Graphics, panel.ClientRectangle, functionStr, a, b);
@@ -3332,17 +3578,26 @@ namespace Programma_2kyrs
             }
             catch
             {
-                // Игнорируем ошибки
+                // В случае ошибки рисуем сообщение
+                panel.Paint += (sender, e) =>
+                {
+                    e.Graphics.Clear(Color.White);
+                    e.Graphics.DrawString("Ошибка в параметрах интеграла!",
+                        new Font("Arial", 12), Brushes.Red, 10, 10);
+                };
+                panel.Invalidate();
             }
         }
 
-        // ОТРИСОВКА ГРАФИКА ИНТЕГРИРУЕМОЙ ФУНКЦИИ
+        // ОТРИСОВКА ГРАФИКА ИНТЕГРИРУЕМОЙ ФУНКЦИИ (с правильными осями)
         private void DrawIntegralFunction(Graphics g, Rectangle drawingArea, string functionStr, double a, double b)
         {
             g.Clear(Color.White);
             g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
 
-            int padding = 30;
+            // Отступы от краев
+            int padding = 40;
             Rectangle graphArea = new Rectangle(
                 drawingArea.Left + padding,
                 drawingArea.Top + padding,
@@ -3350,14 +3605,10 @@ namespace Programma_2kyrs
                 drawingArea.Height - 2 * padding
             );
 
-            // Сетка и оси
-            DrawGrid(g, graphArea);
-            DrawAxes(g, graphArea);
-
-            // Вычисляем диапазон значений функции
+            // Вычисляем диапазон значений функции на интервале [a, b]
             double minY = double.MaxValue;
             double maxY = double.MinValue;
-            int samples = 100;
+            int samples = 200;
 
             for (int i = 0; i <= samples; i++)
             {
@@ -3365,30 +3616,48 @@ namespace Programma_2kyrs
                 try
                 {
                     double y = EvaluateMathExpression(functionStr, x);
-                    minY = Math.Min(minY, y);
-                    maxY = Math.Max(maxY, y);
+                    if (!double.IsInfinity(y) && !double.IsNaN(y))
+                    {
+                        minY = Math.Min(minY, y);
+                        maxY = Math.Max(maxY, y);
+                    }
                 }
                 catch { }
             }
 
-            // Добавляем немного места сверху и снизу
+            // Если функция не определена на всем интервале, используем значения по умолчанию
+            if (minY == double.MaxValue || maxY == double.MinValue)
+            {
+                minY = -1;
+                maxY = 1;
+            }
+
+            // Добавляем немного места сверху и снизу (10%)
             double rangeY = maxY - minY;
+            if (rangeY < 0.1) rangeY = 1; // Минимальный диапазон
             minY -= rangeY * 0.1;
             maxY += rangeY * 0.1;
 
-            // Масштаб
+            // Масштаб для преобразования мировых координат в экранные
             float scaleX = graphArea.Width / (float)(b - a);
             float scaleY = graphArea.Height / (float)(maxY - minY);
 
-            // Центр координат
+            // Начало координат (левая нижняя точка графика)
             PointF origin = new PointF(
-                graphArea.Left - (float)(a * scaleX),
-                graphArea.Bottom + (float)(minY * scaleY)
+                graphArea.Left,
+                graphArea.Bottom
             );
+
+            // Рисуем сетку, привязанную к интервалу [a, b]
+            DrawIntegralGrid(g, graphArea, a, b, minY, maxY, origin, scaleX, scaleY);
+
+            // Рисуем оси координат
+            DrawIntegralAxes(g, graphArea, a, b, minY, maxY, origin, scaleX, scaleY);
 
             // Рисуем функцию
             using (Pen graphPen = new Pen(Color.Blue, 2))
             {
+                List<PointF> functionPoints = new List<PointF>();
                 PointF? lastPoint = null;
 
                 for (int i = 0; i <= graphArea.Width; i++)
@@ -3399,10 +3668,18 @@ namespace Programma_2kyrs
                     {
                         double y = EvaluateMathExpression(functionStr, x);
 
-                        float screenX = origin.X + (float)(x * scaleX);
-                        float screenY = origin.Y - (float)(y * scaleY);
+                        // Ограничиваем слишком большие значения для отображения
+                        if (double.IsInfinity(y) || double.IsNaN(y) || Math.Abs(y) > Math.Abs(maxY) * 10)
+                        {
+                            lastPoint = null;
+                            continue;
+                        }
+
+                        float screenX = origin.X + (float)((x - a) * scaleX);
+                        float screenY = origin.Y - (float)((y - minY) * scaleY);
 
                         PointF currentPoint = new PointF(screenX, screenY);
+                        functionPoints.Add(currentPoint);
 
                         if (lastPoint.HasValue)
                         {
@@ -3419,45 +3696,387 @@ namespace Programma_2kyrs
             }
 
             // Закрашиваем область под кривой (интеграл)
-            using (Brush integralBrush = new SolidBrush(Color.FromArgb(100, Color.LightBlue)))
-            {
-                List<PointF> points = new List<PointF>();
+            DrawIntegralArea(g, graphArea, functionStr, a, b, minY, maxY, origin, scaleX, scaleY);
 
-                // Начинаем с левого нижнего угла
-                points.Add(new PointF(origin.X + (float)(a * scaleX), origin.Y));
+            // Рисуем обозначения методов интегрирования (если они были вычислены)
+            DrawIntegrationMethods(g, graphArea, a, b, minY, maxY, origin, scaleX, scaleY);
+
+            // Подписи и легенда
+            DrawIntegralLabels(g, graphArea, drawingArea, functionStr, a, b);
+        }
+
+        // ОТРИСОВКА СЕТКИ ДЛЯ ИНТЕГРАЛА (привязанной к интервалу [a, b])
+        private void DrawIntegralGrid(Graphics g, Rectangle graphArea, double a, double b, double minY, double maxY, PointF origin, float scaleX, float scaleY)
+        {
+            Pen gridPen = new Pen(Color.LightGray, 1) { DashStyle = DashStyle.Dot };
+            Font gridFont = new Font("Arial", 8);
+            Brush gridBrush = Brushes.Gray;
+
+            // Вертикальные линии сетки (оси X)
+            int xDivisions = 10; // Количество делений по X
+            for (int i = 0; i <= xDivisions; i++)
+            {
+                double xValue = a + (b - a) * i / xDivisions;
+                float screenX = origin.X + (float)((xValue - a) * scaleX);
+
+                if (screenX >= graphArea.Left && screenX <= graphArea.Right)
+                {
+                    // Линия сетки
+                    g.DrawLine(gridPen, screenX, graphArea.Top, screenX, graphArea.Bottom);
+
+                    // Подпись значения X
+                    string label = xValue.ToString("F2");
+                    SizeF textSize = g.MeasureString(label, gridFont);
+                    g.DrawString(label, gridFont, gridBrush,
+                        screenX - textSize.Width / 2, graphArea.Bottom + 5);
+                }
+            }
+
+            // Горизонтальные линии сетки (оси Y)
+            int yDivisions = 8; // Количество делений по Y
+            for (int i = 0; i <= yDivisions; i++)
+            {
+                double yValue = minY + (maxY - minY) * i / yDivisions;
+                float screenY = origin.Y - (float)((yValue - minY) * scaleY);
+
+                if (screenY >= graphArea.Top && screenY <= graphArea.Bottom)
+                {
+                    // Линия сетки
+                    g.DrawLine(gridPen, graphArea.Left, screenY, graphArea.Right, screenY);
+
+                    // Подпись значения Y
+                    string label = yValue.ToString("F2");
+                    SizeF textSize = g.MeasureString(label, gridFont);
+                    g.DrawString(label, gridFont, gridBrush,
+                        graphArea.Left - textSize.Width - 5, screenY - textSize.Height / 2);
+                }
+            }
+        }
+
+        // ОТРИСОВКА ОСЕЙ КООРДИНАТ ДЛЯ ИНТЕГРАЛА
+        private void DrawIntegralAxes(Graphics g, Rectangle graphArea, double a, double b, double minY, double maxY, PointF origin, float scaleX, float scaleY)
+        {
+            Pen axisPen = new Pen(Color.Black, 2);
+            Font axisFont = new Font("Arial", 9, FontStyle.Bold);
+
+            // Ось X (горизонтальная) - рисуем только если 0 в диапазоне Y
+            if (minY <= 0 && maxY >= 0)
+            {
+                float zeroY = origin.Y - (float)((0 - minY) * scaleY);
+                g.DrawLine(axisPen, graphArea.Left, zeroY, graphArea.Right, zeroY);
+
+                // Стрелка оси X
+                g.DrawLine(axisPen, graphArea.Right - 10, zeroY - 5, graphArea.Right, zeroY);
+                g.DrawLine(axisPen, graphArea.Right - 10, zeroY + 5, graphArea.Right, zeroY);
+
+                // Подпись оси X
+                g.DrawString("X", axisFont, Brushes.Black, graphArea.Right - 15, zeroY - 20);
+            }
+
+            // Ось Y (вертикальная) - рисуем только если 0 в диапазоне X
+            if (a <= 0 && b >= 0)
+            {
+                float zeroX = origin.X + (float)((0 - a) * scaleX);
+                g.DrawLine(axisPen, zeroX, graphArea.Top, zeroX, graphArea.Bottom);
+
+                // Стрелка оси Y
+                g.DrawLine(axisPen, zeroX - 5, graphArea.Top + 10, zeroX, graphArea.Top);
+                g.DrawLine(axisPen, zeroX + 5, graphArea.Top + 10, zeroX, graphArea.Top);
+
+                // Подпись оси Y
+                g.DrawString("Y", axisFont, Brushes.Black, zeroX + 10, graphArea.Top);
+            }
+
+            // Если оси не пересекаются в пределах графика, рисуем их по границам
+            if (!(minY <= 0 && maxY >= 0))
+            {
+                // Рисуем ось X внизу
+                g.DrawLine(axisPen, graphArea.Left, graphArea.Bottom, graphArea.Right, graphArea.Bottom);
+                g.DrawString("X", axisFont, Brushes.Black, graphArea.Right - 15, graphArea.Bottom - 20);
+            }
+
+            if (!(a <= 0 && b >= 0))
+            {
+                // Рисуем ось Y слева
+                g.DrawLine(axisPen, graphArea.Left, graphArea.Top, graphArea.Left, graphArea.Bottom);
+                g.DrawString("Y", axisFont, Brushes.Black, graphArea.Left + 10, graphArea.Top);
+            }
+        }
+
+        // ОТРИСОВКА ОБЛАСТИ ИНТЕГРАЛА И МЕТОДОВ
+        private void DrawIntegralArea(Graphics g, Rectangle graphArea, string functionStr, double a, double b, double minY, double maxY, PointF origin, float scaleX, float scaleY)
+        {
+            // Основная заливка под кривой
+            using (Brush integralBrush = new SolidBrush(Color.FromArgb(50, Color.LightBlue)))
+            {
+                List<PointF> areaPoints = new List<PointF>();
+
+                // Начинаем с левой нижней точки (a, minY или 0)
+                double startY = Math.Max(minY, 0);
+                areaPoints.Add(new PointF(
+                    origin.X,
+                    origin.Y - (float)((startY - minY) * scaleY)
+                ));
 
                 // Добавляем точки функции
-                for (int i = 0; i <= graphArea.Width; i++)
+                int segments = 50; // Количество сегментов для аппроксимации
+                for (int i = 0; i <= segments; i++)
                 {
-                    double x = a + (b - a) * i / graphArea.Width;
+                    double x = a + (b - a) * i / segments;
                     try
                     {
                         double y = EvaluateMathExpression(functionStr, x);
-                        float screenX = origin.X + (float)(x * scaleX);
-                        float screenY = origin.Y - (float)(y * scaleY);
-                        points.Add(new PointF(screenX, screenY));
+                        if (double.IsInfinity(y) || double.IsNaN(y)) continue;
+
+                        float screenX = origin.X + (float)((x - a) * scaleX);
+                        float screenY = origin.Y - (float)((y - minY) * scaleY);
+                        areaPoints.Add(new PointF(screenX, screenY));
                     }
                     catch { }
                 }
 
-                // Заканчиваем правым нижним углом
-                points.Add(new PointF(origin.X + (float)(b * scaleX), origin.Y));
+                // Заканчиваем правой нижней точкой
+                areaPoints.Add(new PointF(
+                    origin.X + graphArea.Width,
+                    origin.Y - (float)((startY - minY) * scaleY)
+                ));
 
                 // Рисуем заполненную область
-                if (points.Count > 2)
+                if (areaPoints.Count > 2)
                 {
-                    g.FillPolygon(integralBrush, points.ToArray());
+                    g.FillPolygon(integralBrush, areaPoints.ToArray());
                 }
             }
 
-            // Подписи
-            Font labelFont = new Font("Arial", 9);
-            g.DrawString($"∫f(x)dx на [{a:F2}, {b:F2}]",
-                new Font("Arial", 10, FontStyle.Bold), Brushes.DarkBlue,
-                graphArea.Left, drawingArea.Top + 5);
+            // Визуализация методов интегрирования (если данные доступны)
+            DrawIntegrationVisualization(g, graphArea, functionStr, a, b, minY, maxY, origin, scaleX, scaleY);
+        }
 
-            g.DrawString($"f(x) = {functionStr}", labelFont, Brushes.Black,
-                graphArea.Left, drawingArea.Top + 25);
+        // ВИЗУАЛИЗАЦИЯ МЕТОДОВ ИНТЕГРИРОВАНИЯ -------------------------------------------------------------------
+        private void DrawIntegrationVisualization(Graphics g, Rectangle graphArea, string functionStr,
+            double a, double b, double minY, double maxY, PointF origin, float scaleX, float scaleY)
+        {
+            // Получаем текущие настройки метода из интерфейса
+            // (здесь нужно передать информацию о выбранном методе)
+
+            int n = 10; // Количество разбиений для визуализации
+
+            // Метод прямоугольников (левый)
+            DrawRectanglesMethod(g, graphArea, functionStr, a, b, minY, maxY, origin, scaleX, scaleY, n, "left");
+
+            // Метод трапеций
+            DrawTrapezoidalMethod(g, graphArea, functionStr, a, b, minY, maxY, origin, scaleX, scaleY, n);
+
+            // Метод Симпсона (парабол)
+            DrawSimpsonMethod(g, graphArea, functionStr, a, b, minY, maxY, origin, scaleX, scaleY, n);
+        }
+        // Визуализация метода прямоугольников
+        private void DrawRectanglesMethod(Graphics g, Rectangle graphArea, string functionStr,
+            double a, double b, double minY, double maxY, PointF origin, float scaleX, float scaleY,
+            int n, string type)
+        {
+            double h = (b - a) / n;
+            Pen rectPen = new Pen(Color.FromArgb(150, Color.Green), 1);
+            Brush rectBrush = new SolidBrush(Color.FromArgb(30, Color.Green));
+
+            for (int i = 0; i < n; i++)
+            {
+                double x_left = a + i * h;
+                double x_right = x_left + h;
+
+                double x_sample = type == "left" ? x_left :
+                                 type == "right" ? x_right :
+                                 x_left + h / 2; // средний
+
+                try
+                {
+                    double y = EvaluateMathExpression(functionStr, x_sample);
+                    if (double.IsInfinity(y) || double.IsNaN(y)) continue;
+
+                    float rectLeft = origin.X + (float)((x_left - a) * scaleX);
+                    float rectRight = origin.X + (float)((x_right - a) * scaleX);
+                    float rectTop = origin.Y - (float)((y - minY) * scaleY);
+                    float rectBottom = origin.Y - (float)((0 - minY) * scaleY);
+
+                    if (rectTop > rectBottom)
+                    {
+                        float temp = rectTop;
+                        rectTop = rectBottom;
+                        rectBottom = temp;
+                    }
+
+                    // Заливка прямоугольника
+                    g.FillRectangle(rectBrush, rectLeft, rectTop, rectRight - rectLeft, rectBottom - rectTop);
+
+                    // Контур прямоугольника
+                    g.DrawRectangle(rectPen, rectLeft, rectTop, rectRight - rectLeft, rectBottom - rectTop);
+                }
+                catch { }
+            }
+        }
+        // Визуализация метода трапеций
+        private void DrawTrapezoidalMethod(Graphics g, Rectangle graphArea, string functionStr,
+            double a, double b, double minY, double maxY, PointF origin, float scaleX, float scaleY, int n)
+        {
+            double h = (b - a) / n;
+            Pen trapPen = new Pen(Color.FromArgb(150, Color.Orange), 1);
+            Brush trapBrush = new SolidBrush(Color.FromArgb(30, Color.Orange));
+
+            for (int i = 0; i < n; i++)
+            {
+                double x1 = a + i * h;
+                double x2 = x1 + h;
+
+                try
+                {
+                    double y1 = EvaluateMathExpression(functionStr, x1);
+                    double y2 = EvaluateMathExpression(functionStr, x2);
+
+                    if (double.IsInfinity(y1) || double.IsNaN(y1) ||
+                        double.IsInfinity(y2) || double.IsNaN(y2)) continue;
+
+                    float screenX1 = origin.X + (float)((x1 - a) * scaleX);
+                    float screenX2 = origin.X + (float)((x2 - a) * scaleX);
+                    float screenY1 = origin.Y - (float)((y1 - minY) * scaleY);
+                    float screenY2 = origin.Y - (float)((y2 - minY) * scaleY);
+                    float screenY0 = origin.Y - (float)((0 - minY) * scaleY);
+
+                    // Создаем полигон для трапеции
+                    PointF[] trapezoid = new PointF[4];
+                    trapezoid[0] = new PointF(screenX1, screenY0);
+                    trapezoid[1] = new PointF(screenX1, screenY1);
+                    trapezoid[2] = new PointF(screenX2, screenY2);
+                    trapezoid[3] = new PointF(screenX2, screenY0);
+
+                    // Заливка трапеции
+                    g.FillPolygon(trapBrush, trapezoid);
+
+                    // Контур трапеции
+                    g.DrawPolygon(trapPen, trapezoid);
+                }
+                catch { }
+            }
+        }
+        // Визуализация метода Симпсона
+        private void DrawSimpsonMethod(Graphics g, Rectangle graphArea, string functionStr,
+            double a, double b, double minY, double maxY, PointF origin, float scaleX, float scaleY, int n)
+        {
+            if (n % 2 != 0) n++; // Делаем четным
+
+            double h = (b - a) / n;
+            Pen simpPen = new Pen(Color.FromArgb(150, Color.Purple), 1);
+            Brush simpBrush = new SolidBrush(Color.FromArgb(30, Color.Purple));
+
+            for (int i = 0; i < n; i += 2)
+            {
+                double x0 = a + i * h;
+                double x1 = x0 + h;
+                double x2 = x1 + h;
+
+                try
+                {
+                    double y0 = EvaluateMathExpression(functionStr, x0);
+                    double y1 = EvaluateMathExpression(functionStr, x1);
+                    double y2 = EvaluateMathExpression(functionStr, x2);
+
+                    if (double.IsInfinity(y0) || double.IsNaN(y0) ||
+                        double.IsInfinity(y1) || double.IsNaN(y1) ||
+                        double.IsInfinity(y2) || double.IsNaN(y2)) continue;
+
+                    // Аппроксимируем параболой через три точки
+                    List<PointF> parabolaPoints = new List<PointF>();
+                    int segments = 20;
+
+                    for (int j = 0; j <= segments; j++)
+                    {
+                        double t = (double)j / segments;
+                        double x = x0 + (x2 - x0) * t;
+
+                        // Квадратичная интерполяция (парабола)
+                        double y = y0 * (t - 1) * (t - 2) / 2 - y1 * t * (t - 2) + y2 * t * (t - 1) / 2;
+
+                        float screenX = origin.X + (float)((x - a) * scaleX);
+                        float screenY = origin.Y - (float)((y - minY) * scaleY);
+                        parabolaPoints.Add(new PointF(screenX, screenY));
+                    }
+
+                    // Добавляем точки основания
+                    float screenY0 = origin.Y - (float)((0 - minY) * scaleY);
+                    parabolaPoints.Add(new PointF(
+                        origin.X + (float)((x2 - a) * scaleX), screenY0));
+                    parabolaPoints.Add(new PointF(
+                        origin.X + (float)((x0 - a) * scaleX), screenY0));
+
+                    // Заливка области под параболой
+                    if (parabolaPoints.Count > 2)
+                    {
+                        g.FillPolygon(simpBrush, parabolaPoints.ToArray());
+                        g.DrawPolygon(simpPen, parabolaPoints.ToArray());
+                    }
+                }
+                catch { }
+            }
+        }
+        //--------------------------------------------------------------------------------------------------------
+
+        // ОТРИСОВКА ОБОЗНАЧЕНИЙ МЕТОДОВ ИНТЕГРИРОВАНИЯ
+        private void DrawIntegrationMethods(Graphics g, Rectangle graphArea, double a, double b, double minY, double maxY, PointF origin, float scaleX, float scaleY)
+        {
+            Font legendFont = new Font("Arial", 9);
+            int legendY = graphArea.Top;
+
+            // Легенда методов
+            string[] methods = {
+        "Метод прямоугольников",
+        "Метод трапеций",
+        "Метод Симпсона"
+    };
+
+            Color[] colors = {
+        Color.FromArgb(150, Color.Green),
+        Color.FromArgb(150, Color.Orange),
+        Color.FromArgb(150, Color.Purple)
+    };
+
+            for (int i = 0; i < methods.Length; i++)
+            {
+                // Квадратик-индикатор
+                g.FillRectangle(new SolidBrush(colors[i]),
+                    graphArea.Left, legendY + i * 20, 15, 15);
+                g.DrawRectangle(Pens.Black,
+                    graphArea.Left, legendY + i * 20, 15, 15);
+
+                // Текст
+                g.DrawString(methods[i], legendFont, Brushes.Black,
+                    graphArea.Left + 20, legendY + i * 20);
+            }
+        }
+
+        // ПОДПИСИ ДЛЯ ГРАФИКА ИНТЕГРАЛА
+        private void DrawIntegralLabels(Graphics g, Rectangle graphArea, Rectangle drawingArea, string functionStr, double a, double b)
+        {
+            Font titleFont = new Font("Arial", 11, FontStyle.Bold);
+            Font infoFont = new Font("Arial", 9);
+
+            // Заголовок
+            string title = $"Интеграл функции: f(x) = {functionStr}";
+            g.DrawString(title, titleFont, Brushes.DarkBlue,
+                drawingArea.Left + 10, drawingArea.Top + 5);
+
+            // Информация об интервале
+            string intervalInfo = $"Интервал интегрирования: [{a:F2}, {b:F2}]";
+            g.DrawString(intervalInfo, infoFont, Brushes.DarkGreen,
+                drawingArea.Left + 10, drawingArea.Top + 30);
+
+            // Обозначение интеграла
+            string integralSymbol = $"∫f(x)dx ≈ площадь закрашенной области";
+            g.DrawString(integralSymbol, infoFont, Brushes.DarkRed,
+                drawingArea.Left + 10, drawingArea.Top + 50);
+
+            // Ключевые обозначения
+            string keyInfo = "Обозначения: сетка - координаты, цвета - методы интегрирования";
+            g.DrawString(keyInfo, new Font("Arial", 8), Brushes.Gray,
+                graphArea.Left, graphArea.Bottom + 5);
         }
 
         // ОБНОВЛЕНИЕ ТОЧНОГО ЗНАЧЕНИЯ ИНТЕГРАЛА
@@ -3557,10 +4176,966 @@ namespace Programma_2kyrs
             return currentResult;
         }
 
+        //****************************************************************************************| МЕТОД вычисления СЛАУ |***********************************************************************************//
+
+        // ИНТЕРФЕЙС
+        private void InitializeSLAU()
+        {
+            // Очищаем панель
+            panel1.Controls.Clear();
+        }
+
         //*************************************************************************************| МЕТОД ПОКООРДИНАТНОГО СПУСКА |*******************************************************************************//
 
         // ИНТЕРФЕЙС
         private void InitializeCoordinateDescentControls()
+        {
+            // Очищаем панель
+            panel1.Controls.Clear();
+
+            // Переменные для хранения данных
+            List<PointF> dataPoints = new List<PointF>();
+            string currentDescentFunction = "";
+
+            // Элементы управления
+            var labelFunction = new Label
+            {
+                Text = "Функция f(x,y):",
+                Location = new Point(10, 10),
+                AutoSize = true
+            };
+
+            var textBoxFunction = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(120, 10),
+                Width = 200,
+                Text = "x^2 + y^2",
+                BackColor = Color.WhiteSmoke
+            };
+
+            var labelX0 = new Label
+            {
+                Text = "Начальная точка x₀:",
+                Location = new Point(10, 40),
+                AutoSize = true
+            };
+
+            var textBoxX0 = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(120, 40),
+                Width = 80,
+                Text = "5",
+                BackColor = Color.WhiteSmoke
+            };
+
+            var labelY0 = new Label
+            {
+                Text = "y₀:",
+                Location = new Point(210, 40),
+                AutoSize = true
+            };
+
+            var textBoxY0 = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(230, 40),
+                Width = 80,
+                Text = "5",
+                BackColor = Color.WhiteSmoke
+            };
+
+            var labelEpsilon = new Label
+            {
+                Text = "Точность ε:",
+                Location = new Point(10, 70),
+                AutoSize = true
+            };
+
+            var textBoxEpsilon = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(120, 70),
+                Width = 200,
+                Text = "0,001",
+                BackColor = Color.WhiteSmoke
+            };
+
+            var labelMaxIterations = new Label
+            {
+                Text = "Макс. итераций:",
+                Location = new Point(10, 100),
+                AutoSize = true
+            };
+
+            var textBoxMaxIterations = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(120, 100),
+                Width = 200,
+                Text = "100",
+                BackColor = Color.WhiteSmoke
+            };
+
+            var labelStepSize = new Label
+            {
+                Text = "Шаг α (0.1-0.5):",
+                Location = new Point(10, 130),
+                AutoSize = true
+            };
+
+            var textBoxStepSize = new System.Windows.Forms.TextBox
+            {
+                Location = new Point(120, 130),
+                Width = 200,
+                Text = "0,1",
+                BackColor = Color.WhiteSmoke
+            };
+
+            // Методы спуска
+            var groupBoxMethod = new GroupBox
+            {
+                Text = "Метод спуска",
+                Location = new Point(10, 160),
+                Size = new Size(310, 70),
+                BackColor = Color.Lavender
+            };
+
+            var rbGradient = new RadioButton
+            {
+                Text = "Градиентный спуск",
+                Location = new Point(10, 20),
+                Width = 140,
+                Checked = true
+            };
+
+            var rbCoordinate = new RadioButton
+            {
+                Text = "Покоординатный спуск",
+                Location = new Point(160, 20),
+                Width = 140
+            };
+
+            groupBoxMethod.Controls.Add(rbGradient);
+            groupBoxMethod.Controls.Add(rbCoordinate);
+
+            // Кнопки
+            var btnCalculate = new System.Windows.Forms.Button
+            {
+                Text = "Найти минимум",
+                Location = new Point(10, 240),
+                BackColor = Color.MediumSeaGreen,
+                ForeColor = Color.White,
+                Width = 150,
+                Height = 30
+            };
+
+            var btnClear = new System.Windows.Forms.Button
+            {
+                Text = "Очистить",
+                Location = new Point(170, 240),
+                BackColor = Color.LightCoral,
+                Width = 150,
+                Height = 30
+            };
+
+            var btnExample1 = new System.Windows.Forms.Button
+            {
+                Text = "Пример 1: x² + y²",
+                Location = new Point(10, 280),
+                BackColor = Color.LightBlue,
+                Width = 150,
+                Height = 25
+            };
+
+            var btnExample2 = new System.Windows.Forms.Button
+            {
+                Text = "Пример 2: (x-1)² + (y+2)²",
+                Location = new Point(170, 280),
+                BackColor = Color.LightBlue,
+                Width = 150,
+                Height = 25
+            };
+
+            var btnExample3 = new System.Windows.Forms.Button
+            {
+                Text = "Пример 3: Розенброка",
+                Location = new Point(10, 310),
+                BackColor = Color.LightBlue,
+                Width = 150,
+                Height = 25
+            };
+
+            // Панель для результатов
+            var resultPanel = new Panel
+            {
+                Location = new Point(10, 350),
+                Size = new Size(310, 100),
+                BorderStyle = BorderStyle.FixedSingle,
+                AutoScroll = true,
+                BackColor = Color.WhiteSmoke
+            };
+
+            // Панель для графика 3D
+            var graphPanel = new Panel
+            {
+                Location = new Point(330, 10),
+                Size = new Size(440, 440),
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = Color.White
+            };
+
+            // Обработчики событий для примеров
+            btnExample1.Click += (s, e) =>
+            {
+                textBoxFunction.Text = "x^2 + y^2";
+                textBoxX0.Text = "5";
+                textBoxY0.Text = "5";
+                textBoxStepSize.Text = "0,1";
+            };
+
+            btnExample2.Click += (s, e) =>
+            {
+                textBoxFunction.Text = "(x-1)^2 + (y+2)^2";
+                textBoxX0.Text = "-3";
+                textBoxY0.Text = "3";
+                textBoxStepSize.Text = "0,1";
+            };
+
+            btnExample3.Click += (s, e) =>
+            {
+                textBoxFunction.Text = "100*(y-x^2)^2 + (1-x)^2";
+                textBoxX0.Text = "-1,5";
+                textBoxY0.Text = "1";
+                textBoxStepSize.Text = "0,001";
+                textBoxEpsilon.Text = "0,0001";
+            };
+
+            // Обработчик вычисления
+            btnCalculate.Click += (s, e) =>
+            {
+                try
+                {
+                    string functionStr = textBoxFunction.Text;
+                    double x0 = double.Parse(textBoxX0.Text);
+                    double y0 = double.Parse(textBoxY0.Text);
+                    double epsilon = double.Parse(textBoxEpsilon.Text);
+                    int maxIterations = int.Parse(textBoxMaxIterations.Text);
+                    double stepSize = double.Parse(textBoxStepSize.Text);
+                    bool useCoordinateDescent = rbCoordinate.Checked;
+
+                    // Очищаем предыдущие точки
+                    dataPoints.Clear();
+                    dataPoints.Add(new PointF((float)x0, (float)y0));
+
+                    // Запускаем метод
+                    if (useCoordinateDescent)
+                    {
+                        RunCoordinateDescent(
+                            functionStr,
+                            x0, y0,
+                            epsilon,
+                            maxIterations,
+                            stepSize,
+                            resultPanel,
+                            ref dataPoints
+                        );
+                    }
+                    else
+                    {
+                        RunGradientDescent(
+                            functionStr,
+                            x0, y0,
+                            epsilon,
+                            maxIterations,
+                            stepSize,
+                            resultPanel,
+                            ref dataPoints
+                        );
+                    }
+
+                    // Обновляем график
+                    currentDescentFunction = functionStr;
+                    graphPanel.Invalidate();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            };
+
+            // Обработчик очистки
+            btnClear.Click += (s, e) =>
+            {
+                dataPoints.Clear();
+                resultPanel.Controls.Clear();
+                graphPanel.Invalidate();
+            };
+
+            // Обработчик отрисовки графика
+            graphPanel.Paint += (sender, e) =>
+            {
+                DrawDescentGraph(e.Graphics, graphPanel.ClientRectangle,
+                    currentDescentFunction, dataPoints);
+            };
+
+            // Добавляем элементы на панель
+            panel1.Controls.AddRange(new Control[]
+            {
+        labelFunction, textBoxFunction,
+        labelX0, textBoxX0, labelY0, textBoxY0,
+        labelEpsilon, textBoxEpsilon,
+        labelMaxIterations, textBoxMaxIterations,
+        labelStepSize, textBoxStepSize,
+        groupBoxMethod,
+        btnCalculate, btnClear,
+        btnExample1, btnExample2, btnExample3,
+        resultPanel,
+        graphPanel
+            });
+        }
+
+        // Метод покоординатного спуска
+        private void RunCoordinateDescent(string functionStr, double x0, double y0,
+            double epsilon, int maxIterations, double stepSize,
+            Panel resultPanel, ref List<PointF> dataPoints)
+        {
+            resultPanel.Controls.Clear();
+
+            try
+            {
+                double x = x0;
+                double y = y0;
+                double prevValue = EvaluateTwoVariableFunction(functionStr, x, y);
+                int iteration = 0;
+                bool converged = false;
+
+                List<string> results = new List<string>();
+                results.Add("=== ПОКООРДИНАТНЫЙ СПУСК ===");
+                results.Add($"Функция: f(x,y) = {functionStr}");
+                results.Add($"Начальная точка: ({x0:F4}, {y0:F4})");
+                results.Add($"Шаг: {stepSize}, Точность: {epsilon}");
+                results.Add("");
+
+                // Основной цикл
+                while (iteration < maxIterations && !converged)
+                {
+                    iteration++;
+
+                    // Сохраняем предыдущие значения
+                    double prevX = x;
+                    double prevY = y;
+
+                    // 1. Оптимизация по x (фиксируем y)
+                    double fx1 = EvaluateTwoVariableFunction(functionStr, x + stepSize, y);
+                    double fx2 = EvaluateTwoVariableFunction(functionStr, x - stepSize, y);
+                    double fx = EvaluateTwoVariableFunction(functionStr, x, y);
+
+                    if (fx1 < fx)
+                    {
+                        x += stepSize;
+                    }
+                    else if (fx2 < fx)
+                    {
+                        x -= stepSize;
+                    }
+
+                    // 2. Оптимизация по y (фиксируем обновленный x)
+                    double fy1 = EvaluateTwoVariableFunction(functionStr, x, y + stepSize);
+                    double fy2 = EvaluateTwoVariableFunction(functionStr, x, y - stepSize);
+                    double fy = EvaluateTwoVariableFunction(functionStr, x, y);
+
+                    if (fy1 < fy)
+                    {
+                        y += stepSize;
+                    }
+                    else if (fy2 < fy)
+                    {
+                        y -= stepSize;
+                    }
+
+                    // Вычисляем новое значение функции
+                    double newValue = EvaluateTwoVariableFunction(functionStr, x, y);
+
+                    // Сохраняем точку
+                    dataPoints.Add(new PointF((float)x, (float)y));
+
+                    // Проверка сходимости
+                    double delta = Math.Abs(newValue - prevValue);
+                    double distance = Math.Sqrt(Math.Pow(x - prevX, 2) + Math.Pow(y - prevY, 2));
+
+                    if (delta < epsilon && distance < epsilon)
+                    {
+                        converged = true;
+                    }
+
+                    prevValue = newValue;
+
+                    // Выводим информацию о итерации
+                    if (iteration <= 10 || iteration % 10 == 0 || converged)
+                    {
+                        results.Add($"Итер. {iteration}: x={x:F6}, y={y:F6}, f={newValue:F6}");
+                    }
+                }
+
+                // Формируем итоговый результат
+                double finalValue = EvaluateTwoVariableFunction(functionStr, x, y);
+
+                results.Add("");
+                results.Add("=== РЕЗУЛЬТАТ ===");
+                results.Add($"Минимум найден в точке:");
+                results.Add($"x = {x:F8}");
+                results.Add($"y = {y:F8}");
+                results.Add($"f(x,y) = {finalValue:F8}");
+                results.Add($"Итераций: {iteration}");
+                results.Add(converged ? "Сошлось!" : "Достигнут лимит итераций");
+
+                // Отображаем результаты
+                DisplayDescentResults(resultPanel, results);
+            }
+            catch (Exception ex)
+            {
+                AddResultLabel(resultPanel, $"Ошибка: {ex.Message}", Color.Red);
+            }
+        }
+
+        // Метод градиентного спуска
+        private void RunGradientDescent(string functionStr, double x0, double y0,
+            double epsilon, int maxIterations, double stepSize,
+            Panel resultPanel, ref List<PointF> dataPoints)
+        {
+            resultPanel.Controls.Clear();
+
+            try
+            {
+                double x = x0;
+                double y = y0;
+                double prevValue = EvaluateTwoVariableFunction(functionStr, x, y);
+                int iteration = 0;
+                bool converged = false;
+
+                List<string> results = new List<string>();
+                results.Add("=== ГРАДИЕНТНЫЙ СПУСК ===");
+                results.Add($"Функция: f(x,y) = {functionStr}");
+                results.Add($"Начальная точка: ({x0:F4}, {y0:F4})");
+                results.Add($"Шаг: {stepSize}, Точность: {epsilon}");
+                results.Add("");
+
+                // Основной цикл
+                while (iteration < maxIterations && !converged)
+                {
+                    iteration++;
+
+                    // Вычисляем градиент (численно)
+                    double h = 0.0001;
+
+                    // Частная производная по x
+                    double df_dx = (EvaluateTwoVariableFunction(functionStr, x + h, y) -
+                                  EvaluateTwoVariableFunction(functionStr, x - h, y)) / (2 * h);
+
+                    // Частная производная по y
+                    double df_dy = (EvaluateTwoVariableFunction(functionStr, x, y + h) -
+                                  EvaluateTwoVariableFunction(functionStr, x, y - h)) / (2 * h);
+
+                    // Обновляем координаты
+                    double newX = x - stepSize * df_dx;
+                    double newY = y - stepSize * df_dy;
+
+                    // Сохраняем точку
+                    dataPoints.Add(new PointF((float)newX, (float)newY));
+
+                    // Вычисляем новое значение функции
+                    double newValue = EvaluateTwoVariableFunction(functionStr, newX, newY);
+
+                    // Проверка сходимости
+                    double delta = Math.Abs(newValue - prevValue);
+
+                    if (delta < epsilon)
+                    {
+                        converged = true;
+                    }
+
+                    // Обновляем переменные
+                    x = newX;
+                    y = newY;
+                    prevValue = newValue;
+
+                    // Выводим информацию о итерации
+                    if (iteration <= 10 || iteration % 10 == 0 || converged)
+                    {
+                        results.Add($"Итер. {iteration}: x={x:F6}, y={y:F6}, f={newValue:F6}");
+                        results.Add($"  Градиент: ({df_dx:F6}, {df_dy:F6})");
+                    }
+                }
+
+                // Формируем итоговый результат
+                double finalValue = EvaluateTwoVariableFunction(functionStr, x, y);
+
+                results.Add("");
+                results.Add("=== РЕЗУЛЬТАТ ===");
+                results.Add($"Минимум найден в точке:");
+                results.Add($"x = {x:F8}");
+                results.Add($"y = {y:F8}");
+                results.Add($"f(x,y) = {finalValue:F8}");
+                results.Add($"Итераций: {iteration}");
+                results.Add(converged ? "Сошлось!" : "Достигнут лимит итераций");
+
+                // Отображаем результаты
+                DisplayDescentResults(resultPanel, results);
+            }
+            catch (Exception ex)
+            {
+                AddResultLabel(resultPanel, $"Ошибка: {ex.Message}", Color.Red);
+            }
+        }
+
+        // Вычисление функции двух переменных
+        private double EvaluateTwoVariableFunction(string expression, double x, double y)
+        {
+            try
+            {
+                // Подготовка выражения
+                expression = expression.ToLower().Replace(" ", "");
+
+                // Создаем парсер
+                var parser = new MathParser();
+                parser.LocalVariables["x"] = x;
+                parser.LocalVariables["y"] = y;
+                parser.LocalVariables["pi"] = Math.PI;
+                parser.LocalVariables["e"] = Math.E;
+
+                // Предварительная обработка
+                expression = PreprocessTwoVariableExpression(expression);
+
+                return parser.Parse(expression);
+            }
+            catch (Exception ex)
+            {
+                throw new ArgumentException($"Ошибка вычисления функции: {ex.Message}");
+            }
+        }
+
+        // Обработка выражения с двумя переменными
+        private string PreprocessTwoVariableExpression(string expression)
+        {
+            // Уже есть метод PreprocessExpression, но он для одной переменной
+            // Используем его как основу
+            expression = PreprocessExpression(expression);
+
+            // Дополнительные замены для двух переменных
+            var replacements = new Dictionary<string, string>
+    {
+        { "sin(x)", "sin(x)" },
+        { "cos(x)", "cos(x)" },
+        { "exp(x)", "exp(x)" },
+        { "sin(y)", "sin(y)" },
+        { "cos(y)", "cos(y)" },
+        { "exp(y)", "exp(y)" },
+        { "x^2", "x^2" },
+        { "y^2", "y^2" },
+        { "x*y", "x*y" },
+        { "y*x", "x*y" }
+    };
+
+            foreach (var replacement in replacements)
+            {
+                expression = expression.Replace(replacement.Key, replacement.Value);
+            }
+
+            return expression;
+        }
+
+        // Отображение результатов спуска
+        private void DisplayDescentResults(Panel panel, List<string> results)
+        {
+            panel.Controls.Clear();
+
+            int y = 10;
+            foreach (string line in results)
+            {
+                var label = new Label
+                {
+                    Text = line,
+                    Location = new Point(10, y),
+                    AutoSize = true,
+                    Font = new Font("Consolas", 9),
+                    ForeColor = Color.Black
+                };
+
+                panel.Controls.Add(label);
+                y += 20;
+            }
+        }
+
+        // Отрисовка графика для метода спуска
+        private void DrawDescentGraph(Graphics g, Rectangle drawingArea,
+            string functionStr, List<PointF> dataPoints)
+        {
+            g.Clear(Color.White);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+
+            if (string.IsNullOrEmpty(functionStr) || dataPoints.Count == 0)
+            {
+                g.DrawString("Введите функцию и найдите минимум",
+                    new Font("Arial", 12), Brushes.Gray,
+                    drawingArea.Width / 2 - 150, drawingArea.Height / 2 - 10);
+                return;
+            }
+
+            // Определяем область графика
+            int padding = 40;
+            Rectangle graphArea = new Rectangle(
+                drawingArea.Left + padding,
+                drawingArea.Top + padding,
+                drawingArea.Width - 2 * padding,
+                drawingArea.Height - 2 * padding
+            );
+
+            // Находим диапазон координат
+            float minX = float.MaxValue;
+            float maxX = float.MinValue;
+            float minY = float.MaxValue;
+            float maxY = float.MinValue;
+
+            foreach (var point in dataPoints)
+            {
+                minX = Math.Min(minX, point.X);
+                maxX = Math.Max(maxX, point.X);
+                minY = Math.Min(minY, point.Y);
+                maxY = Math.Max(maxY, point.Y);
+            }
+
+            // Добавляем немного места по краям
+            float rangeX = maxX - minX;
+            float rangeY = maxY - minY;
+
+            if (rangeX < 1) rangeX = 2;
+            if (rangeY < 1) rangeY = 2;
+
+            minX -= rangeX * 0.1f;
+            maxX += rangeX * 0.1f;
+            minY -= rangeY * 0.1f;
+            maxY += rangeY * 0.1f;
+
+            // Масштаб
+            float scaleX = graphArea.Width / (maxX - minX);
+            float scaleY = graphArea.Height / (maxY - minY);
+
+            // Преобразуем точки в экранные координаты
+            List<PointF> screenPoints = new List<PointF>();
+            foreach (var point in dataPoints)
+            {
+                float screenX = graphArea.Left + (point.X - minX) * scaleX;
+                float screenY = graphArea.Bottom - (point.Y - minY) * scaleY;
+                screenPoints.Add(new PointF(screenX, screenY));
+            }
+
+            // Рисуем сетку
+            DrawDescentGrid(g, graphArea, minX, maxX, minY, maxY, scaleX, scaleY);
+
+            // Рисуем оси
+            DrawDescentAxes(g, graphArea, minX, maxX, minY, maxY, scaleX, scaleY);
+
+            // Рисуем линии уровня (изолинии)
+            DrawContourLines(g, graphArea, functionStr, minX, maxX, minY, maxY, scaleX, scaleY);
+
+            // Рисуем траекторию спуска
+            if (screenPoints.Count >= 2)
+            {
+                using (Pen pathPen = new Pen(Color.Red, 2))
+                {
+                    for (int i = 0; i < screenPoints.Count - 1; i++)
+                    {
+                        g.DrawLine(pathPen, screenPoints[i], screenPoints[i + 1]);
+                    }
+                }
+            }
+
+            // Рисуем точки
+            for (int i = 0; i < screenPoints.Count; i++)
+            {
+                var point = screenPoints[i];
+
+                // Разные цвета для разных точек
+                Brush pointBrush;
+                if (i == 0)
+                    pointBrush = Brushes.Green; // Начальная точка
+                else if (i == screenPoints.Count - 1)
+                    pointBrush = Brushes.Blue; // Конечная точка
+                else
+                    pointBrush = Brushes.Orange; // Промежуточные точки
+
+                g.FillEllipse(pointBrush, point.X - 4, point.Y - 4, 8, 8);
+                g.DrawEllipse(Pens.Black, point.X - 4, point.Y - 4, 8, 8);
+
+                // Подписываем начальную и конечную точки
+                if (i == 0)
+                {
+                    g.DrawString($"Начало: ({dataPoints[i].X:F2}, {dataPoints[i].Y:F2})",
+                        new Font("Arial", 8), Brushes.DarkGreen,
+                        point.X + 5, point.Y - 10);
+                }
+                else if (i == screenPoints.Count - 1)
+                {
+                    g.DrawString($"Конец: ({dataPoints[i].X:F4}, {dataPoints[i].Y:F4})",
+                        new Font("Arial", 8), Brushes.DarkBlue,
+                        point.X + 5, point.Y + 5);
+                }
+            }
+
+            // Подписи
+            DrawDescentLabels(g, graphArea, drawingArea, functionStr, dataPoints);
+        }
+
+        // Рисуем сетку для графика спуска
+        private void DrawDescentGrid(Graphics g, Rectangle graphArea,
+            float minX, float maxX, float minY, float maxY,
+            float scaleX, float scaleY)
+        {
+            Pen gridPen = new Pen(Color.LightGray, 1) { DashStyle = DashStyle.Dot };
+            Font gridFont = new Font("Arial", 8);
+
+            // Вертикальные линии
+            int xDivisions = 10;
+            for (int i = 0; i <= xDivisions; i++)
+            {
+                float xValue = minX + (maxX - minX) * i / xDivisions;
+                float screenX = graphArea.Left + (xValue - minX) * scaleX;
+
+                g.DrawLine(gridPen, screenX, graphArea.Top, screenX, graphArea.Bottom);
+
+                // Подпись
+                string label = xValue.ToString("F1");
+                SizeF textSize = g.MeasureString(label, gridFont);
+                g.DrawString(label, gridFont, Brushes.Gray,
+                    screenX - textSize.Width / 2, graphArea.Bottom + 5);
+            }
+
+            // Горизонтальные линии
+            int yDivisions = 10;
+            for (int i = 0; i <= yDivisions; i++)
+            {
+                float yValue = minY + (maxY - minY) * i / yDivisions;
+                float screenY = graphArea.Bottom - (yValue - minY) * scaleY;
+
+                g.DrawLine(gridPen, graphArea.Left, screenY, graphArea.Right, screenY);
+
+                // Подпись
+                string label = yValue.ToString("F1");
+                SizeF textSize = g.MeasureString(label, gridFont);
+                g.DrawString(label, gridFont, Brushes.Gray,
+                    graphArea.Left - textSize.Width - 5, screenY - textSize.Height / 2);
+            }
+        }
+
+        // Рисуем оси для графика спуска
+        private void DrawDescentAxes(Graphics g, Rectangle graphArea,
+            float minX, float maxX, float minY, float maxY,
+            float scaleX, float scaleY)
+        {
+            Pen axisPen = new Pen(Color.Black, 2);
+            Font axisFont = new Font("Arial", 9, FontStyle.Bold);
+
+            // Ось X (если 0 в диапазоне Y)
+            if (minY <= 0 && maxY >= 0)
+            {
+                float zeroY = graphArea.Bottom - (0 - minY) * scaleY;
+                g.DrawLine(axisPen, graphArea.Left, zeroY, graphArea.Right, zeroY);
+
+                // Стрелка
+                g.DrawLine(axisPen, graphArea.Right - 10, zeroY - 5, graphArea.Right, zeroY);
+                g.DrawLine(axisPen, graphArea.Right - 10, zeroY + 5, graphArea.Right, zeroY);
+
+                // Подпись
+                g.DrawString("X", axisFont, Brushes.Black, graphArea.Right - 15, zeroY - 20);
+            }
+
+            // Ось Y (если 0 в диапазоне X)
+            if (minX <= 0 && maxX >= 0)
+            {
+                float zeroX = graphArea.Left + (0 - minX) * scaleX;
+                g.DrawLine(axisPen, zeroX, graphArea.Top, zeroX, graphArea.Bottom);
+
+                // Стрелка
+                g.DrawLine(axisPen, zeroX - 5, graphArea.Top + 10, zeroX, graphArea.Top);
+                g.DrawLine(axisPen, zeroX + 5, graphArea.Top + 10, zeroX, graphArea.Top);
+
+                // Подпись
+                g.DrawString("Y", axisFont, Brushes.Black, zeroX + 10, graphArea.Top);
+            }
+        }
+
+        // Рисуем линии уровня (изолинии)
+        private void DrawContourLines(Graphics g, Rectangle graphArea, string functionStr,
+            float minX, float maxX, float minY, float maxY,
+            float scaleX, float scaleY)
+        {
+            if (string.IsNullOrEmpty(functionStr))
+                return;
+
+            try
+            {
+                Pen contourPen = new Pen(Color.FromArgb(100, Color.Blue), 1);
+
+                // Количество линий уровня
+                int contourCount = 10;
+
+                // Находим минимальное и максимальное значение функции в области
+                double minF = double.MaxValue;
+                double maxF = double.MinValue;
+                int samples = 20;
+
+                for (int i = 0; i <= samples; i++)
+                {
+                    for (int j = 0; j <= samples; j++)
+                    {
+                        double x = minX + (maxX - minX) * i / samples;
+                        double y = minY + (maxY - minY) * j / samples;
+
+                        try
+                        {
+                            double f = EvaluateTwoVariableFunction(functionStr, x, y);
+                            minF = Math.Min(minF, f);
+                            maxF = Math.Max(maxF, f);
+                        }
+                        catch { }
+                    }
+                }
+
+                // Рисуем линии уровня
+                for (int level = 0; level <= contourCount; level++)
+                {
+                    double fValue = minF + (maxF - minF) * level / contourCount;
+
+                    List<PointF> contourPoints = new List<PointF>();
+
+                    // Проходим по области и ищем точки, где функция равна fValue
+                    int gridSize = 50;
+                    for (int i = 0; i < gridSize; i++)
+                    {
+                        for (int j = 0; j < gridSize; j++)
+                        {
+                            double x1 = minX + (maxX - minX) * i / gridSize;
+                            double x2 = minX + (maxX - minX) * (i + 1) / gridSize;
+                            double y1 = minY + (maxY - minY) * j / gridSize;
+                            double y2 = minY + (maxY - minY) * (j + 1) / gridSize;
+
+                            // Проверяем четыре угла квадрата
+                            double[] values = new double[4];
+                            try { values[0] = EvaluateTwoVariableFunction(functionStr, x1, y1); } catch { values[0] = double.NaN; }
+                            try { values[1] = EvaluateTwoVariableFunction(functionStr, x2, y1); } catch { values[1] = double.NaN; }
+                            try { values[2] = EvaluateTwoVariableFunction(functionStr, x1, y2); } catch { values[2] = double.NaN; }
+                            try { values[3] = EvaluateTwoVariableFunction(functionStr, x2, y2); } catch { values[3] = double.NaN; }
+
+                            // Ищем пересечения с изолинией
+                            for (int edge = 0; edge < 4; edge++)
+                            {
+                                // Пропускаем NaN
+                                if (double.IsNaN(values[edge]) || double.IsNaN(values[(edge + 1) % 4]))
+                                    continue;
+
+                                // Проверяем, проходит ли изолиния через это ребро
+                                if ((values[edge] <= fValue && values[(edge + 1) % 4] >= fValue) ||
+                                    (values[edge] >= fValue && values[(edge + 1) % 4] <= fValue))
+                                {
+                                    // Линейная интерполяция
+                                    double t = (fValue - values[edge]) / (values[(edge + 1) % 4] - values[edge]);
+                                    double interpX, interpY;
+
+                                    switch (edge)
+                                    {
+                                        case 0: // от (x1,y1) к (x2,y1)
+                                            interpX = x1 + t * (x2 - x1);
+                                            interpY = y1;
+                                            break;
+                                        case 1: // от (x2,y1) к (x2,y2)
+                                            interpX = x2;
+                                            interpY = y1 + t * (y2 - y1);
+                                            break;
+                                        case 2: // от (x1,y2) к (x2,y2)
+                                            interpX = x1 + t * (x2 - x1);
+                                            interpY = y2;
+                                            break;
+                                        case 3: // от (x1,y1) к (x1,y2)
+                                            interpX = x1;
+                                            interpY = y1 + t * (y2 - y1);
+                                            break;
+                                        default:
+                                            continue;
+                                    }
+
+                                    // Преобразуем в экранные координаты
+                                    float screenX = graphArea.Left + (float)((interpX - minX) * scaleX);
+                                    float screenY = graphArea.Bottom - (float)((interpY - minY) * scaleY);
+
+                                    contourPoints.Add(new PointF(screenX, screenY));
+                                }
+                            }
+                        }
+                    }
+
+                    // Рисуем линию уровня
+                    if (contourPoints.Count >= 2)
+                    {
+                        // Сортируем точки для создания непрерывной линии
+                        contourPoints = contourPoints.OrderBy(p => p.X).ThenBy(p => p.Y).ToList();
+
+                        // Рисуем отдельные сегменты
+                        for (int i = 0; i < contourPoints.Count - 1; i++)
+                        {
+                            float dx = Math.Abs(contourPoints[i + 1].X - contourPoints[i].X);
+                            float dy = Math.Abs(contourPoints[i + 1].Y - contourPoints[i].Y);
+
+                            // Пропускаем слишком длинные сегменты (разрывы)
+                            if (dx < graphArea.Width / 10 && dy < graphArea.Height / 10)
+                            {
+                                g.DrawLine(contourPen, contourPoints[i], contourPoints[i + 1]);
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Игнорируем ошибки при отрисовке линий уровня
+            }
+        }
+
+        // Подписи для графика спуска
+        private void DrawDescentLabels(Graphics g, Rectangle graphArea, Rectangle drawingArea,
+            string functionStr, List<PointF> dataPoints)
+        {
+            Font titleFont = new Font("Arial", 11, FontStyle.Bold);
+            Font infoFont = new Font("Arial", 9);
+
+            // Заголовок
+            string title = $"Метод спуска: f(x,y) = {functionStr}";
+            g.DrawString(title, titleFont, Brushes.DarkBlue,
+                drawingArea.Left + 10, drawingArea.Top + 5);
+
+            // Информация о траектории
+            if (dataPoints.Count > 1)
+            {
+                string startInfo = $"Начало: ({dataPoints[0].X:F2}, {dataPoints[0].Y:F2})";
+                string endInfo = $"Конец: ({dataPoints.Last().X:F4}, {dataPoints.Last().Y:F4})";
+                string stepsInfo = $"Шагов: {dataPoints.Count - 1}";
+
+                g.DrawString(startInfo, infoFont, Brushes.DarkGreen,
+                    drawingArea.Left + 10, drawingArea.Top + 30);
+                g.DrawString(endInfo, infoFont, Brushes.DarkBlue,
+                    drawingArea.Left + 10, drawingArea.Top + 50);
+                g.DrawString(stepsInfo, infoFont, Brushes.DarkRed,
+                    drawingArea.Left + 10, drawingArea.Top + 70);
+            }
+
+            // Легенда
+            string legend = "Легенда: ● - начальная точка, ● - траектория, ● - конечная точка";
+            g.DrawString(legend, new Font("Arial", 8), Brushes.DarkGray,
+                graphArea.Left, graphArea.Bottom + 5);
+        }
+
+        //***************************************************************************************| МЕТОД наименьших квадратов |*******************************************************************************//
+
+        // ИНТЕРФЕЙС
+        private void InitializeLeastSquares()
         {
             // Очищаем панель
             panel1.Controls.Clear();
