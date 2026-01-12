@@ -16,6 +16,8 @@ using System.Linq.Expressions;
 using Mathos.Parser;
 using System.Runtime.Remoting.Channels;
 using System.Diagnostics;
+using DocumentFormat;
+using System.IO;
 
 namespace Programma_2kyrs
 {
@@ -1065,7 +1067,7 @@ namespace Programma_2kyrs
                     DrawSpecialPoints(g, graphArea, center, scaleX, scaleY);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Игнорируем ошибки отрисовки
             }
@@ -4172,11 +4174,934 @@ namespace Programma_2kyrs
 
         //****************************************************************************************| МЕТОД вычисления СЛАУ |***********************************************************************************//
 
-        // ИНТЕРФЕЙС
+        // ИНТЕРФЕЙС РЕШЕНИЯ СЛАУ
         private void InitializeSLAU()
         {
             // Очищаем панель
             panel1.Controls.Clear();
+
+            // Данные для СЛАУ
+            List<double[]> matrixData = new List<double[]>();
+            List<double> vectorData = new List<double>();
+            List<double> solution = new List<double>();
+
+            // Группа для выбора метода
+            var groupBoxMethod = new GroupBox
+            {
+                Text = "Выбор метода решения",
+                Location = new Point(10, 10),
+                Size = new Size(310, 90),
+                BackColor = Color.Lavender
+            };
+
+            var rbGauss = new RadioButton
+            {
+                Text = "Метод Гаусса",
+                Location = new Point(10, 20),
+                Width = 140,
+                Checked = true
+            };
+
+            var rbJordanGauss = new RadioButton
+            {
+                Text = "Метод Жордан-Г.",
+                Location = new Point(160, 20),
+                Width = 140
+            };
+
+            var rbCramer = new RadioButton
+            {
+                Text = "Метод Крамера",
+                Location = new Point(10, 45),
+                Width = 140
+            };
+
+            groupBoxMethod.Controls.Add(rbGauss);
+            groupBoxMethod.Controls.Add(rbJordanGauss);
+            groupBoxMethod.Controls.Add(rbCramer);
+
+            // Группа для размерности системы
+            var groupBoxSize = new GroupBox
+            {
+                Text = "Размерность системы",
+                Location = new Point(10, 110),
+                Size = new Size(310, 80),
+                BackColor = Color.Lavender
+            };
+
+            var labelSize = new Label
+            {
+                Text = "Количество уравнений (2-10):",
+                Location = new Point(10, 25),
+                AutoSize = true
+            };
+
+            var numericSize = new NumericUpDown
+            {
+                Location = new Point(200, 23),
+                Width = 80,
+                Minimum = 2,
+                Maximum = 10,
+                Value = 3
+            };
+
+            var btnCreateSystem = new System.Windows.Forms.Button
+            {
+                Text = "Создать систему",
+                Location = new Point(100, 50),
+                BackColor = Color.LightBlue,
+                Width = 120,
+                Height = 25
+            };
+
+            groupBoxSize.Controls.Add(labelSize);
+            groupBoxSize.Controls.Add(numericSize);
+            groupBoxSize.Controls.Add(btnCreateSystem);
+
+            // Кнопки для работы с системой
+            var btnGenerateRandom = new System.Windows.Forms.Button
+            {
+                Text = "Случайная система",
+                Location = new Point(10, 200),
+                BackColor = Color.LightGreen,
+                Width = 150,
+                Height = 30
+            };
+
+            var btnExample1 = new System.Windows.Forms.Button
+            {
+                Text = "Пример 1 (3x3)",
+                Location = new Point(170, 200),
+                BackColor = Color.LightBlue,
+                Width = 150,
+                Height = 30
+            };
+
+            var btnSolve = new System.Windows.Forms.Button
+            {
+                Text = "Решить СЛАУ",
+                Location = new Point(10, 240),
+                BackColor = Color.MediumSeaGreen,
+                ForeColor = Color.White,
+                Width = 150,
+                Height = 30
+            };
+
+            var btnClear = new System.Windows.Forms.Button
+            {
+                Text = "Очистить",
+                Location = new Point(170, 240),
+                BackColor = Color.LightCoral,
+                Width = 150,
+                Height = 30
+            };
+
+            // DataGridView для ввода матрицы
+            var dataGridView = new DataGridView
+            {
+                Location = new Point(10, 280),
+                Size = new Size(310, 180),
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                RowHeadersVisible = true,
+                ColumnHeadersVisible = true,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                ScrollBars = ScrollBars.Both,
+                BackColor = Color.WhiteSmoke,
+                BorderStyle = BorderStyle.Fixed3D
+            };
+
+            // Панель для результатов
+            var resultPanel = new Panel
+            {
+                Location = new Point(330, 10),
+                Size = new Size(440, 450),
+                BorderStyle = BorderStyle.FixedSingle,
+                AutoScroll = true,
+                BackColor = Color.WhiteSmoke
+            };
+
+            // Инициализация DataGridView
+            InitializeDataGridView(dataGridView, (int)numericSize.Value);
+
+            // Обработчики событий
+            btnCreateSystem.Click += (s, e) =>
+            {
+                int size = (int)numericSize.Value;
+                InitializeDataGridView(dataGridView, size);
+            };
+
+            btnGenerateRandom.Click += (s, e) =>
+            {
+                GenerateRandomSystem(dataGridView, (int)numericSize.Value);
+            };
+
+            btnExample1.Click += (s, e) =>
+            {
+                LoadExampleSystem(dataGridView);
+            };
+
+            btnSolve.Click += (s, e) =>
+            {
+                try
+                {
+                    // Получаем данные из DataGridView
+                    if (!GetMatrixFromDataGridView(dataGridView, out matrixData, out vectorData))
+                    {
+                        MessageBox.Show("Пожалуйста, заполните все ячейки матрицы корректными числами!", "Ошибка",
+                            MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+
+                    int n = matrixData.Count;
+
+                    // Проверяем, что матрица квадратная
+                    if (matrixData.Any(row => row.Length != n))
+                    {
+                        MessageBox.Show("Матрица должна быть квадратной! Количество столбцов должно равняться количеству строк.",
+                            "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+
+                    // Проверяем определитель матрицы (для методов Гаусса и Крамера)
+                    if (rbGauss.Checked || rbCramer.Checked)
+                    {
+                        double det = CalculateDeterminant(ConvertToSquareMatrix(matrixData));
+                        if (Math.Abs(det) < 1e-10)
+                        {
+                            var result = MessageBox.Show($"Определитель матрицы равен {det:F10}. Система может не иметь единственного решения.\nПродолжить решение?",
+                                "Предупреждение", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+
+                            if (result == DialogResult.No)
+                                return;
+                        }
+                    }
+
+                    // Выбор метода решения
+                    if (rbGauss.Checked)
+                    {
+                        solution = SolveByGauss(matrixData, vectorData);
+                    }
+                    else if (rbJordanGauss.Checked)
+                    {
+                        solution = SolveByJordanGauss(matrixData, vectorData);
+                    }
+                    else if (rbCramer.Checked)
+                    {
+                        // Для метода Крамера проверяем размер системы
+                        if (n > 6)
+                        {
+                            var result = MessageBox.Show($"Метод Крамера для системы {n}x{n} может работать медленно.\nРекомендуется использовать метод Гаусса.\nПродолжить?",
+                                "Предупреждение", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+
+                            if (result == DialogResult.No)
+                                return;
+                        }
+                        solution = SolveByCramer(matrixData, vectorData);
+                    }
+
+                    // Отображаем результаты
+                    DisplaySLAUResults(resultPanel, matrixData, vectorData, solution,
+                        rbGauss.Checked ? "Гаусса" : rbJordanGauss.Checked ? "Жордана-Гаусса" : "Крамера");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Ошибка решения СЛАУ: {ex.Message}", "Ошибка",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            };
+
+            btnClear.Click += (s, e) =>
+            {
+                matrixData.Clear();
+                vectorData.Clear();
+                solution.Clear();
+                resultPanel.Controls.Clear();
+                InitializeDataGridView(dataGridView, (int)numericSize.Value);
+            };
+
+            // Добавляем элементы на панель
+            panel1.Controls.AddRange(new Control[]
+            {
+        groupBoxMethod,
+        groupBoxSize,
+        btnGenerateRandom,
+        btnExample1,
+        btnSolve,
+        btnClear,
+        dataGridView,
+        resultPanel
+            });
+        }
+
+        // ИНИЦИАЛИЗАЦИЯ DataGridView ДЛЯ ВВОДА МАТРИЦЫ
+        private void InitializeDataGridView(DataGridView dgv, int size)
+        {
+            dgv.Columns.Clear();
+            dgv.Rows.Clear();
+
+            // Создаем столбцы для матрицы коэффициентов
+            for (int i = 0; i < size; i++)
+            {
+                DataGridViewTextBoxColumn column = new DataGridViewTextBoxColumn
+                {
+                    Name = $"col{i}",
+                    HeaderText = $"x{i + 1}",
+                    Width = 60,
+                    DefaultCellStyle = new DataGridViewCellStyle
+                    {
+                        Alignment = DataGridViewContentAlignment.MiddleRight,
+                        Format = "F3"
+                    }
+                };
+                dgv.Columns.Add(column);
+            }
+
+            // Столбец для свободных членов
+            DataGridViewTextBoxColumn freeColumn = new DataGridViewTextBoxColumn
+            {
+                Name = $"col{size}",
+                HeaderText = $"Своб. член",
+                Width = 80,
+                DefaultCellStyle = new DataGridViewCellStyle
+                {
+                    Alignment = DataGridViewContentAlignment.MiddleRight,
+                    Format = "F3",
+                    BackColor = Color.LightYellow
+                }
+            };
+            dgv.Columns.Add(freeColumn);
+
+            // Добавляем строки
+            for (int i = 0; i < size; i++)
+            {
+                dgv.Rows.Add();
+                dgv.Rows[i].HeaderCell.Value = $"Ур. {i + 1}";
+            }
+
+            dgv.RowHeadersWidth = 70;
+
+            // Устанавливаем значения по умолчанию
+            for (int i = 0; i < size; i++)
+            {
+                for (int j = 0; j < size; j++)
+                {
+                    dgv.Rows[i].Cells[j].Value = (i == j) ? "1" : "0";
+                }
+                dgv.Rows[i].Cells[size].Value = "0";
+            }
+        }
+
+        // ГЕНЕРАЦИЯ СЛУЧАЙНОЙ СИСТЕМЫ
+        private void GenerateRandomSystem(DataGridView dgv, int size)
+        {
+            Random rand = new Random();
+
+            // Очищаем текущий DataGridView
+            dgv.Columns.Clear();
+            dgv.Rows.Clear();
+
+            // Инициализируем с новым размером
+            InitializeDataGridView(dgv, size);
+
+            for (int i = 0; i < size; i++)
+            {
+                for (int j = 0; j < size; j++)
+                {
+                    // Коэффициенты от -10 до 10
+                    double value = rand.Next(-10, 11) + rand.NextDouble() * 2 - 1;
+                    dgv.Rows[i].Cells[j].Value = Math.Round(value, 3).ToString("F3");
+                }
+
+                // Свободный член
+                double freeTerm = rand.Next(-20, 21) + rand.NextDouble() * 2 - 1;
+                dgv.Rows[i].Cells[size].Value = Math.Round(freeTerm, 3).ToString("F3");
+            }
+        }
+
+        // ЗАГРУЗКА ПРИМЕРА СИСТЕМЫ
+        private void LoadExampleSystem(DataGridView dgv)
+        {
+            // Пример системы 3x3:
+            // 2x + y - z = 8
+            // -3x - y + 2z = -11
+            // -2x + y + 2z = -3
+
+            int size = 3;
+
+            // Очищаем текущий DataGridView
+            dgv.Columns.Clear();
+            dgv.Rows.Clear();
+
+            // Инициализируем с размером 3
+            InitializeDataGridView(dgv, size);
+
+            // Устанавливаем значения из примера
+            dgv.Rows[0].Cells[0].Value = "2";
+            dgv.Rows[0].Cells[1].Value = "1";
+            dgv.Rows[0].Cells[2].Value = "-1";
+            dgv.Rows[0].Cells[3].Value = "8";
+
+            dgv.Rows[1].Cells[0].Value = "-3";
+            dgv.Rows[1].Cells[1].Value = "-1";
+            dgv.Rows[1].Cells[2].Value = "2";
+            dgv.Rows[1].Cells[3].Value = "-11";
+
+            dgv.Rows[2].Cells[0].Value = "-2";
+            dgv.Rows[2].Cells[1].Value = "1";
+            dgv.Rows[2].Cells[2].Value = "2";
+            dgv.Rows[2].Cells[3].Value = "-3";
+        }
+
+        // ПОЛУЧЕНИЕ МАТРИЦЫ ИЗ DataGridView
+        private bool GetMatrixFromDataGridView(DataGridView dgv, out List<double[]> matrix, out List<double> vector)
+        {
+            matrix = new List<double[]>();
+            vector = new List<double>();
+
+            int rows = dgv.Rows.Count;
+            int cols = dgv.Columns.Count - 1; // Последний столбец - свободные члены
+
+            // Проверяем, что есть хотя бы одна строка
+            if (rows == 0)
+                return false;
+
+            for (int i = 0; i < rows; i++)
+            {
+                // Пропускаем пустые строки в конце
+                if (dgv.Rows[i].IsNewRow)
+                    continue;
+
+                double[] row = new double[cols];
+                bool rowValid = true;
+
+                for (int j = 0; j < cols; j++)
+                {
+                    string cellValue = dgv.Rows[i].Cells[j].Value?.ToString();
+                    if (string.IsNullOrWhiteSpace(cellValue))
+                    {
+                        dgv.Rows[i].Cells[j].Value = "0";
+                        cellValue = "0";
+                    }
+
+                    if (!double.TryParse(cellValue, out row[j]))
+                    {
+                        rowValid = false;
+                        break;
+                    }
+                }
+
+                if (!rowValid)
+                {
+                    matrix.Clear();
+                    vector.Clear();
+                    return false;
+                }
+
+                matrix.Add(row);
+
+                // Получаем свободный член
+                string freeValue = dgv.Rows[i].Cells[cols].Value?.ToString();
+                if (string.IsNullOrWhiteSpace(freeValue))
+                {
+                    dgv.Rows[i].Cells[cols].Value = "0";
+                    freeValue = "0";
+                }
+
+                if (!double.TryParse(freeValue, out double freeTerm))
+                {
+                    matrix.Clear();
+                    vector.Clear();
+                    return false;
+                }
+
+                vector.Add(freeTerm);
+            }
+
+            return matrix.Count > 0;
+        }
+
+        // 1. МЕТОД ГАУССА
+        private List<double> SolveByGauss(List<double[]> A, List<double> B)
+        {
+            int n = A.Count;
+
+            // Создаем копии матрицы и вектора
+            double[,] matrix = new double[n, n];
+            double[] vector = new double[n];
+
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    matrix[i, j] = A[i][j];
+                }
+                vector[i] = B[i];
+            }
+
+            // Прямой ход метода Гаусса
+            for (int i = 0; i < n; i++)
+            {
+                // Поиск максимального элемента в столбце для устойчивости
+                int maxRow = i;
+                double maxVal = Math.Abs(matrix[i, i]);
+
+                for (int k = i + 1; k < n; k++)
+                {
+                    if (Math.Abs(matrix[k, i]) > maxVal)
+                    {
+                        maxVal = Math.Abs(matrix[k, i]);
+                        maxRow = k;
+                    }
+                }
+
+                // Перестановка строк
+                if (maxRow != i)
+                {
+                    for (int j = i; j < n; j++)
+                    {
+                        double temp = matrix[i, j];
+                        matrix[i, j] = matrix[maxRow, j];
+                        matrix[maxRow, j] = temp;
+                    }
+
+                    double tempVec = vector[i];
+                    vector[i] = vector[maxRow];
+                    vector[maxRow] = tempVec;
+                }
+
+                // Проверка на ноль на диагонали
+                if (Math.Abs(matrix[i, i]) < 1e-15)
+                {
+                    throw new Exception("Матрица вырожденная или плохо обусловленная");
+                }
+
+                // Нормализация текущей строки
+                double diag = matrix[i, i];
+                for (int j = i; j < n; j++)
+                {
+                    matrix[i, j] /= diag;
+                }
+                vector[i] /= diag;
+
+                // Исключение переменной из следующих строк
+                for (int k = i + 1; k < n; k++)
+                {
+                    double factor = matrix[k, i];
+                    for (int j = i; j < n; j++)
+                    {
+                        matrix[k, j] -= factor * matrix[i, j];
+                    }
+                    vector[k] -= factor * vector[i];
+                }
+            }
+
+            // Обратный ход
+            List<double> solution = new List<double>(new double[n]);
+
+            for (int i = n - 1; i >= 0; i--)
+            {
+                solution[i] = vector[i];
+                for (int j = i + 1; j < n; j++)
+                {
+                    solution[i] -= matrix[i, j] * solution[j];
+                }
+            }
+
+            return solution;
+        }
+
+        // 2. МЕТОД ЖОРДАНА-ГАУССА
+        private List<double> SolveByJordanGauss(List<double[]> A, List<double> B)
+        {
+            int n = A.Count;
+
+            // Создаем расширенную матрицу
+            double[,] augmented = new double[n, n + 1];
+
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    augmented[i, j] = A[i][j];
+                }
+                augmented[i, n] = B[i];
+            }
+
+            // Приведение к диагональному виду
+            for (int i = 0; i < n; i++)
+            {
+                // Поиск максимального элемента в столбце
+                int maxRow = i;
+                double maxVal = Math.Abs(augmented[i, i]);
+
+                for (int k = i + 1; k < n; k++)
+                {
+                    if (Math.Abs(augmented[k, i]) > maxVal)
+                    {
+                        maxVal = Math.Abs(augmented[k, i]);
+                        maxRow = k;
+                    }
+                }
+
+                // Перестановка строк
+                if (maxRow != i)
+                {
+                    for (int j = 0; j <= n; j++)
+                    {
+                        double temp = augmented[i, j];
+                        augmented[i, j] = augmented[maxRow, j];
+                        augmented[maxRow, j] = temp;
+                    }
+                }
+
+                // Проверка на ноль на диагонали
+                if (Math.Abs(augmented[i, i]) < 1e-15)
+                {
+                    throw new Exception("Матрица вырожденная или плохо обусловленная");
+                }
+
+                // Нормализация текущей строки
+                double pivot = augmented[i, i];
+                for (int j = 0; j <= n; j++)
+                {
+                    augmented[i, j] /= pivot;
+                }
+
+                // Исключение переменной из всех других строк
+                for (int k = 0; k < n; k++)
+                {
+                    if (k != i)
+                    {
+                        double factor = augmented[k, i];
+                        for (int j = 0; j <= n; j++)
+                        {
+                            augmented[k, j] -= factor * augmented[i, j];
+                        }
+                    }
+                }
+            }
+
+            // Извлечение решения
+            List<double> solution = new List<double>();
+            for (int i = 0; i < n; i++)
+            {
+                solution.Add(augmented[i, n]);
+            }
+
+            return solution;
+        }
+
+        // 3. МЕТОД КРАМЕРА
+        private List<double> SolveByCramer(List<double[]> A, List<double> B)
+        {
+            int n = A.Count;
+
+            // Вычисляем главный определитель
+            double[,] mainMatrix = ConvertToSquareMatrix(A);
+            double mainDet = CalculateDeterminant(mainMatrix);
+
+            if (Math.Abs(mainDet) < 1e-15)
+            {
+                throw new Exception("Определитель главной матрицы равен нулю. Метод Крамера не применим.");
+            }
+
+            List<double> solution = new List<double>();
+
+            // Для каждой переменной вычисляем определитель с заменой столбца
+            for (int i = 0; i < n; i++)
+            {
+                double[,] tempMatrix = new double[n, n];
+
+                // Копируем матрицу
+                for (int row = 0; row < n; row++)
+                {
+                    for (int col = 0; col < n; col++)
+                    {
+                        tempMatrix[row, col] = mainMatrix[row, col];
+                    }
+                }
+
+                // Заменяем i-й столбец на вектор свободных членов
+                for (int row = 0; row < n; row++)
+                {
+                    tempMatrix[row, i] = B[row];
+                }
+
+                double varDet = CalculateDeterminant(tempMatrix);
+                solution.Add(varDet / mainDet);
+            }
+
+            return solution;
+        }
+
+        // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+
+        // Преобразование List<double[]> в double[,]
+        private double[,] ConvertToSquareMatrix(List<double[]> matrix)
+        {
+            int n = matrix.Count;
+            double[,] result = new double[n, n];
+
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    result[i, j] = matrix[i][j];
+                }
+            }
+
+            return result;
+        }
+
+        // ВЫЧИСЛЕНИЕ ОПРЕДЕЛИТЕЛЯ (рекурсивно)
+        private double CalculateDeterminant(double[,] matrix)
+        {
+            int n = matrix.GetLength(0);
+
+            // Базовые случаи
+            if (n == 1)
+                return matrix[0, 0];
+
+            if (n == 2)
+                return matrix[0, 0] * matrix[1, 1] - matrix[0, 1] * matrix[1, 0];
+
+            double det = 0;
+
+            // Разложение по первой строке
+            for (int j = 0; j < n; j++)
+            {
+                // Создаем минор
+                double[,] minor = new double[n - 1, n - 1];
+
+                for (int row = 1; row < n; row++)
+                {
+                    int colIndex = 0;
+                    for (int col = 0; col < n; col++)
+                    {
+                        if (col != j)
+                        {
+                            minor[row - 1, colIndex] = matrix[row, col];
+                            colIndex++;
+                        }
+                    }
+                }
+
+                // Знак для алгебраического дополнения
+                double sign = (j % 2 == 0) ? 1 : -1;
+
+                det += sign * matrix[0, j] * CalculateDeterminant(minor);
+            }
+
+            return det;
+        }
+
+        // ВЫЧИСЛЕНИЕ ОПРЕДЕЛИТЕЛЯ (итеративно методом Гаусса)
+        private double CalculateDeterminantGauss(double[,] matrix)
+        {
+            int n = matrix.GetLength(0);
+            double[,] tempMatrix = new double[n, n];
+
+            // Копируем матрицу
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    tempMatrix[i, j] = matrix[i, j];
+                }
+            }
+
+            double det = 1;
+            int swapCount = 0;
+
+            // Приведение к треугольному виду
+            for (int i = 0; i < n; i++)
+            {
+                // Поиск максимального элемента в столбце
+                int maxRow = i;
+                double maxVal = Math.Abs(tempMatrix[i, i]);
+
+                for (int k = i + 1; k < n; k++)
+                {
+                    if (Math.Abs(tempMatrix[k, i]) > maxVal)
+                    {
+                        maxVal = Math.Abs(tempMatrix[k, i]);
+                        maxRow = k;
+                    }
+                }
+
+                // Перестановка строк
+                if (maxRow != i)
+                {
+                    for (int j = 0; j < n; j++)
+                    {
+                        double temp = tempMatrix[i, j];
+                        tempMatrix[i, j] = tempMatrix[maxRow, j];
+                        tempMatrix[maxRow, j] = temp;
+                    }
+                    swapCount++;
+                }
+
+                // Если диагональный элемент равен 0, определитель равен 0
+                if (Math.Abs(tempMatrix[i, i]) < 1e-15)
+                    return 0;
+
+                det *= tempMatrix[i, i];
+
+                // Исключение переменной из следующих строк
+                for (int k = i + 1; k < n; k++)
+                {
+                    double factor = tempMatrix[k, i] / tempMatrix[i, i];
+                    for (int j = i; j < n; j++)
+                    {
+                        tempMatrix[k, j] -= factor * tempMatrix[i, j];
+                    }
+                }
+            }
+
+            // Учет перестановок строк
+            if (swapCount % 2 == 1)
+                det = -det;
+
+            return det;
+        }
+
+        // ОТОБРАЖЕНИЕ РЕЗУЛЬТАТОВ СЛАУ
+        private void DisplaySLAUResults(Panel panel, List<double[]> matrix, List<double> vector,
+            List<double> solution, string methodName)
+        {
+            panel.Controls.Clear();
+
+            List<string> results = new List<string>();
+            int n = matrix.Count;
+
+            results.Add($"=== РЕШЕНИЕ СЛАУ МЕТОДОМ {methodName.ToUpper()} ===");
+            results.Add($"Размер системы: {n} уравнений, {n} неизвестных");
+            results.Add($"Дата расчета: {DateTime.Now:dd.MM.yyyy HH:mm:ss}");
+            results.Add("");
+
+            // Выводим систему уравнений
+            results.Add("СИСТЕМА УРАВНЕНИЙ:");
+            for (int i = 0; i < n; i++)
+            {
+                string equation = "";
+                for (int j = 0; j < n; j++)
+                {
+                    if (j == 0)
+                    {
+                        equation += $"{matrix[i][j]:F3}·x{j + 1}";
+                    }
+                    else
+                    {
+                        string sign = matrix[i][j] >= 0 ? " + " : " - ";
+                        equation += $"{sign}{Math.Abs(matrix[i][j]):F3}·x{j + 1}";
+                    }
+                }
+                equation += $" = {vector[i]:F3}";
+                results.Add($"  {equation}");
+            }
+
+            results.Add("");
+            results.Add("РЕШЕНИЕ:");
+
+            // Проверяем корректность решения
+            bool isSolutionValid = true;
+            List<double> residuals = new List<double>();
+            double maxResidual = 0;
+
+            for (int i = 0; i < n; i++)
+            {
+                results.Add($"  x{i + 1} = {solution[i]:F10}");
+
+                // Вычисляем невязку
+                double residual = 0;
+                for (int j = 0; j < n; j++)
+                {
+                    residual += matrix[i][j] * solution[j];
+                }
+                residual -= vector[i];
+                residuals.Add(residual);
+
+                maxResidual = Math.Max(maxResidual, Math.Abs(residual));
+
+                if (Math.Abs(residual) > 1e-6)
+                    isSolutionValid = false;
+            }
+
+            results.Add("");
+            results.Add("ПРОВЕРКА РЕШЕНИЯ (невязки):");
+            for (int i = 0; i < n; i++)
+            {
+                results.Add($"  Уравнение {i + 1}: {residuals[i]:E10}");
+            }
+
+            results.Add("");
+            results.Add($"Максимальная невязка: {maxResidual:E10}");
+            results.Add($"Решение {(isSolutionValid ? "КОРРЕКТНО" : "имеет значительные невязки")}");
+
+            // Дополнительная информация
+            results.Add("");
+            results.Add("ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ:");
+
+            // Определитель матрицы
+            try
+            {
+                double det = CalculateDeterminantGauss(ConvertToSquareMatrix(matrix));
+                results.Add($"  Определитель матрицы: {det:E10}");
+
+                // Оценка числа обусловленности
+                if (Math.Abs(det) < 1e-10)
+                    results.Add($"  Матрица близка к вырожденной");
+                else if (Math.Abs(det) < 1e-5)
+                    results.Add($"  Матрица плохо обусловлена");
+                else
+                    results.Add($"  Матрица хорошо обусловлена");
+            }
+            catch (Exception ex)
+            {
+                results.Add($"  Определитель: ошибка вычисления ({ex.Message})");
+            }
+
+            // Нормы вектора решения
+            try
+            {
+                double norm1 = solution.Sum(x => Math.Abs(x));
+                double norm2 = Math.Sqrt(solution.Sum(x => x * x));
+                double normInf = solution.Max(x => Math.Abs(x));
+
+                results.Add($"  Норма L1 решения: {norm1:F6}");
+                results.Add($"  Норма L2 решения: {norm2:F6}");
+                results.Add($"  Норма L∞ решения: {normInf:F6}");
+            }
+            catch
+            {
+                results.Add($"  Нормы решения: не вычислены");
+            }
+
+            // Сравнение методов (если возможно)
+            results.Add("");
+            results.Add("СОВЕТЫ ПО ВЫБОРУ МЕТОДА:");
+            results.Add("  • Гаусса: универсальный, быстрый для любых систем");
+            results.Add("  • Жордана-Гаусса: наглядный, но требует больше вычислений");
+            results.Add("  • Крамера: понятный, но медленный для больших систем (>4x4)");
+
+            // Отображаем результаты
+            int y = 10;
+            foreach (string line in results)
+            {
+                var label = new Label
+                {
+                    Text = line,
+                    Location = new Point(10, y),
+                    AutoSize = true,
+                    Font = new Font("Consolas", 9),
+                    ForeColor = Color.Black,
+                    MaximumSize = new Size(panel.Width - 20, 0)
+                };
+
+                panel.Controls.Add(label);
+                y += 20;
+            }
         }
 
         //*************************************************************************************| МЕТОД ПОКООРДИНАТНОГО СПУСКА |*******************************************************************************//
